@@ -1,0 +1,21 @@
+[from_tracker]
+url = https://tracker.cc
+api_key = 
+
+[to_tracker]
+url = https://tracker.org
+api_key = 
+username = 
+password = 
+totp_secret = 
+
+[image_host]
+url = https://i.tracker.org
+api_key = 
+
+; Map source image URLs to pre-rehosted URLs
+; Each line: <source_url> = <rehosted_url>
+; Multiple source URLs can map to the same rehosted URL.
+[known_images]
+; https://imghost.com/img1.png = https://rehost.com/img.png
+; https://imghost.com/img2.png = https://rehost.com/img.png
