@@ -124,11 +124,26 @@ api_key = <Image host API key>
 ;[strip_lines]
 ;pattern = Created by L4G's Upload Assistant
 ;pattern = Uploaded with.*\bTool\b
+
+; Optional: text to append to every description submitted to the target tracker.
+; Must be the last section in the file. All lines after the header are used verbatim —
+; blank lines and lines starting with ; are preserved.
+;[description_append]
+;Encoded and uploaded by Example.
+;[url=https://example.com]example.com[/url]
 ```
 
 `totp_secret` is the raw TOTP secret shown when setting up two-factor authentication,
 encoded in Base32 (spaces are ignored). Leave it blank if the account does not have
 2FA enabled.
+
+`[strip_lines]` removes individual lines from the source description before it is submitted.
+Each `pattern` is a .NET regular expression evaluated case-insensitively. If any pattern
+matches, the entire line is removed. Repeat the key for multiple patterns.
+
+`[description_append]` appends fixed text to every description submitted. Every line after
+the section header is used verbatim — blank lines and lines beginning with `;` are
+preserved as-is. It must be the last section in the file.
 
 ## Building
 
@@ -161,37 +176,6 @@ unit3d-description-clone backfill "<release group name>" "<uploader username>"
 In backfill mode the tool filters the target tracker by both torrent name and uploader, paginates through all matching results and processes each
 torrent. A JSON file is written to `cache/<id>.json` once a torrent is processed so
 that subsequent runs skip it.
-
-## Session caching
-
-After the first successful login the session cookies are saved to
-`cache/target-cookies.json`. Subsequent runs reuse those cookies and skip the login
-step. Delete this file to force a fresh login.
-
-## Optional: strip_lines
-
-The optional `[strip_lines]` section removes individual lines from the source description
-before it is submitted. Each `pattern` value is a .NET regular expression evaluated
-case-insensitively against every line. If any pattern matches, the entire line is removed.
-Repeat the `pattern` key to define multiple patterns:
-
-```ini
-[strip_lines]
-pattern = Created by L4G's Upload Assistant
-pattern = Uploaded with.*\bTool\b
-```
-
-## Optional: description_append
-
-The optional `[description_append]` section appends fixed text to every description that is
-submitted. Every line after the section header is used verbatim (blank lines and lines
-beginning with `;` are preserved as-is). Use it to add a standard footer or attribution note.
-
-```ini
-[description_append]
-Encoded and uploaded by Example.
-[url=https://example.com]example.com[/url]
-```
 
 ## Cache directory
 
