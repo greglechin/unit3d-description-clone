@@ -16,9 +16,8 @@ remain accessible on the target tracker.
 5. Any lines in the description matching a configured `[strip_lines]` pattern are removed.
 6. Every image URL found in the BBCode description is downloaded and re-uploaded to
    the configured image host. SVG images are converted to PNG before uploading.
-7. Any text after the last image tag is stripped (credits, source-site footers, etc.).
-8. The optional `[description_append]` config section is appended to the final description.
-9. The tool logs in to the target tracker (caching the session in `cache/`), opens the
+7. The optional `[description_append]` config section is appended to the final description.
+8. The tool logs in to the target tracker (caching the session in `cache/`), opens the
    torrent edit page, fills in the new description, and submits the form.
 
 ## Source tracker selection
