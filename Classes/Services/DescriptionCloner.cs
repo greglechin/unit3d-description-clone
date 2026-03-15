@@ -90,7 +90,6 @@ internal sealed class DescriptionCloner(
         if (!await RehostImagesAsync(description))
             return;
 
-        //TrimAfterLastImage(description);
         AppendDescriptionSuffix(description);
 
         await web.EnsureLoggedInAsync();
@@ -154,24 +153,6 @@ internal sealed class DescriptionCloner(
         }
 
         return true;
-    }
-
-    private static void TrimAfterLastImage(StringBuilder description)
-    {
-        var text = description.ToString();
-        var lastImgClose = text.LastIndexOf("[/img]", StringComparison.OrdinalIgnoreCase);
-        var lastImgUrlClose = text.LastIndexOf("[/img][/url]", StringComparison.OrdinalIgnoreCase);
-
-        if (lastImgClose >= 0)
-        {
-            var cutAt = lastImgClose + "[/img]".Length;
-            description.Remove(cutAt, description.Length - cutAt);
-        }
-        else if (lastImgUrlClose >= 0)
-        {
-            var cutAt = lastImgUrlClose + "[/img][/url]".Length;
-            description.Remove(cutAt, description.Length - cutAt);
-        }
     }
 
     private static void AppendDescriptionSuffix(StringBuilder description)
