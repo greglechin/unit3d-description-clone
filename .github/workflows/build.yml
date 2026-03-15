@@ -25,7 +25,7 @@ jobs:
 
       - name: Publish self-contained linux-x64
         run: |
-          dotnet publish \
+          dotnet publish src/ \
             --configuration Release \
             --runtime linux-x64 \
             --self-contained true \

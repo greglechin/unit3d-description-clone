@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="unit3d-description-clone.ini" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../unit3d-description-clone.ini" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
