@@ -134,13 +134,13 @@ encoded in Base32 (spaces are ignored). Leave it blank if the account does not h
 ## Building
 
 ```
-dotnet build
+dotnet build src/
 ```
 
 To produce a self-contained single-file binary for Linux x64:
 
 ```
-dotnet publish -c Release -r linux-x64
+dotnet publish src/ -c Release -r linux-x64
 ```
 
 The output is placed in `publish/`.
