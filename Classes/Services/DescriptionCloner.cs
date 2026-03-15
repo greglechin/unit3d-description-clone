@@ -87,6 +87,8 @@ internal sealed class DescriptionCloner(
         var description = new StringBuilder(sourceTorrent.Attributes.Description);
         var mediaInfo = sourceTorrent.Attributes.MediaInfo;
 
+        StripLines(description);
+
         if (!await RehostImagesAsync(description))
             return;
 
@@ -94,6 +96,19 @@ internal sealed class DescriptionCloner(
 
         await web.EnsureLoggedInAsync();
         await SubmitEditAsync(torrentId, description.ToString(), mediaInfo);
+    }
+
+    private void StripLines(StringBuilder description)
+    {
+        if (config.StripLinePatterns.Count == 0)
+            return;
+
+        var lines = description.ToString().Split('\n');
+        var filtered = lines.Where(line =>
+            !config.StripLinePatterns.Any(rx => rx.IsMatch(line)));
+        var result = string.Join('\n', filtered);
+        description.Clear();
+        description.Append(result);
     }
 
     private async Task<bool> RehostImagesAsync(StringBuilder description)

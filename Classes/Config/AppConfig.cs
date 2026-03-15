@@ -1,5 +1,7 @@
 namespace Unit3dDescriptionClone.Config;
 
+using System.Text.RegularExpressions;
+
 internal sealed record FromTrackerConfig(
     string Url,
     string ApiKey,
@@ -15,7 +17,8 @@ internal sealed record AppConfig(
     string ToTrackerTotpSecret,
     string ImageHostUrl,
     string ImageHostApiKey,
-    IReadOnlyDictionary<string, string> KnownImages)
+    IReadOnlyDictionary<string, string> KnownImages,
+    IReadOnlyList<Regex> StripLinePatterns)
 {
     public FromTrackerConfig? GetFromTrackerForTorrent(string torrentName) =>
         FromTrackers.FirstOrDefault(ft =>
@@ -29,6 +32,12 @@ internal sealed record AppConfig(
         var knownImages = cfg.TryGetValue("known_images", out var ki)
             ? (IReadOnlyDictionary<string, string>)ki[0]
             : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        List<Regex> stripLinePatterns = cfg.TryGetValue("strip_lines", out var sl)
+            && sl[0].TryGetValue("pattern", out var patterns)
+            ? [.. patterns.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(p => new Regex(p, RegexOptions.IgnoreCase | RegexOptions.Compiled))]
+            : [];
 
         List<FromTrackerConfig> fromTrackers = cfg.TryGetValue("from_tracker", out var fromSections)
             ? [.. fromSections.Select(from => new FromTrackerConfig(
@@ -50,6 +59,7 @@ internal sealed record AppConfig(
             ToTrackerTotpSecret: to.GetValueOrDefault("totp_secret", ""),
             ImageHostUrl: img["url"],
             ImageHostApiKey: img["api_key"],
-            KnownImages: knownImages);
+            KnownImages: knownImages,
+            StripLinePatterns: stripLinePatterns);
     }
 }

@@ -13,11 +13,12 @@ remain accessible on the target tracker.
 3. It locates a matching torrent on the selected source tracker using one of two strategies
    (see [Source tracker lookup](#source-tracker-lookup) below).
 4. The description is copied from the source torrent.
-5. Every image URL found in the BBCode description is downloaded and re-uploaded to
+5. Any lines in the description matching a configured `[strip_lines]` pattern are removed.
+6. Every image URL found in the BBCode description is downloaded and re-uploaded to
    the configured image host. SVG images are converted to PNG before uploading.
-6. Any text after the last image tag is stripped (credits, source-site footers, etc.).
-7. An optional `description_append.txt` file is appended to the final description.
-8. The tool logs in to the target tracker (caching the session in `cache/`), opens the
+7. Any text after the last image tag is stripped (credits, source-site footers, etc.).
+8. An optional `description_append.txt` file is appended to the final description.
+9. The tool logs in to the target tracker (caching the session in `cache/`), opens the
    torrent edit page, fills in the new description, and submits the form.
 
 ## Source tracker selection
@@ -118,6 +119,12 @@ api_key = <Image host API key>
 ; Multiple source URLs may map to the same rehosted URL.
 [known_images]
 ; https://old-host.example/image.png = https://images.example/image.png
+
+; Optional: remove lines from the source description that match any pattern.
+; Patterns are .NET regular expressions (case-insensitive). Repeat the key for multiple patterns.
+;[strip_lines]
+;pattern = Created by L4G's Upload Assistant
+;pattern = Uploaded with.*\bTool\b
 ```
 
 `totp_secret` is the raw TOTP secret shown when setting up two-factor authentication,
@@ -161,6 +168,19 @@ that subsequent runs skip it.
 After the first successful login the session cookies are saved to
 `cache/target-cookies.json`. Subsequent runs reuse those cookies and skip the login
 step. Delete this file to force a fresh login.
+
+## Optional: strip_lines
+
+The optional `[strip_lines]` section removes individual lines from the source description
+before it is submitted. Each `pattern` value is a .NET regular expression evaluated
+case-insensitively against every line. If any pattern matches, the entire line is removed.
+Repeat the `pattern` key to define multiple patterns:
+
+```ini
+[strip_lines]
+pattern = Created by L4G's Upload Assistant
+pattern = Uploaded with.*\bTool\b
+```
 
 ## Optional: description_append.txt
 

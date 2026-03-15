@@ -26,6 +26,13 @@ totp_secret =
 url = https://i.tracker.org
 api_key = 
 
+; Optional: remove lines from the source description that match any of the given patterns.
+; Each pattern is a .NET regular expression (case-insensitive). Repeat the key for multiple patterns.
+; The entire line is removed when a pattern matches.
+;[strip_lines]
+;pattern = Created by L4G's Upload Assistant
+;pattern = Uploaded with.*\bTool\b
+
 ; Map source image URLs to pre-rehosted URLs
 ; Each line: <source_url> = <rehosted_url>
 ; Multiple source URLs can map to the same rehosted URL.
