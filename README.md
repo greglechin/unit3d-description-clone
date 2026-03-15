@@ -133,18 +133,6 @@ api_key = <Image host API key>
 ;[url=https://example.com]example.com[/url]
 ```
 
-`totp_secret` is the raw TOTP secret shown when setting up two-factor authentication,
-encoded in Base32 (spaces are ignored). Leave it blank if the account does not have
-2FA enabled.
-
-`[strip_lines]` removes individual lines from the source description before it is submitted.
-Each `pattern` is a .NET regular expression evaluated case-insensitively. If any pattern
-matches, the entire line is removed. Repeat the key for multiple patterns.
-
-`[description_append]` appends fixed text to every description submitted. Every line after
-the section header is used verbatim — blank lines and lines beginning with `;` are
-preserved as-is. It must be the last section in the file.
-
 ## Building
 
 ```
