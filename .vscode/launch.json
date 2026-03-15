@@ -9,7 +9,7 @@
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "dotnet: build",
-            "program": "${workspaceFolder}/bin/Debug/net10.0/unit3d-description-clone.dll",
+            "program": "${workspaceFolder}/src/bin/Debug/net10.0/unit3d-description-clone.dll",
             "args": [
                 "749449"
             ],
