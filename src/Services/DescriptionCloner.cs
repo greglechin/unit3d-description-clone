@@ -192,6 +192,9 @@ internal sealed class DescriptionCloner(
         var editHtml = await web.GetEditPageHtmlAsync(torrentId);
         var editForm = Unit3dWebClient.ParseEditPage(editHtml);
 
+        // don't ask
+        description = description.Replace("h:m:s", "h:​m:s", StringComparison.OrdinalIgnoreCase);
+
         editForm.Fields["description"] = $"[code]{description}[/code]";
         if (!string.IsNullOrEmpty(mediaInfo) &&
             string.IsNullOrWhiteSpace(editForm.Fields.GetValueOrDefault("mediainfo")))
