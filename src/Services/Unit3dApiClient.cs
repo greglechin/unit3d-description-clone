@@ -6,7 +6,7 @@ using Unit3dDescriptionClone.Serialization;
 
 namespace Unit3dDescriptionClone.Services;
 
-internal sealed class Unit3dApiClient(HttpClient client, AppConfig config)
+internal sealed class Unit3dApiClient(HttpClient client, AppConfig config) : ISourceTrackerClient
 {
     public async Task<TorrentInfo?> GetTorrentAsync(string torrentId)
     {
@@ -80,5 +80,17 @@ internal sealed class Unit3dApiClient(HttpClient client, AppConfig config)
             Console.WriteLine($"  Rate limited (429), retrying in {delay.TotalSeconds:0}s...");
             await Task.Delay(delay);
         }
+    }
+
+    async Task<SourceTorrentResult?> ISourceTrackerClient.FindSourceTorrentAsync(string fileName, FromTrackerConfig fromTracker)
+    {
+        var t = await FindSourceTorrentAsync(fileName, fromTracker);
+        return t is null ? null : new SourceTorrentResult(t.Attributes.Description, t.Attributes.MediaInfo);
+    }
+
+    async Task<SourceTorrentResult?> ISourceTrackerClient.FindSourceTorrentByTmdbIdAsync(int tmdbId, string fileName, FromTrackerConfig fromTracker)
+    {
+        var t = await FindSourceTorrentByTmdbIdAsync(tmdbId, fileName, fromTracker);
+        return t is null ? null : new SourceTorrentResult(t.Attributes.Description, t.Attributes.MediaInfo);
     }
 }

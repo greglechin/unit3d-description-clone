@@ -2,7 +2,10 @@ namespace Unit3dDescriptionClone.Config;
 
 using System.Text.RegularExpressions;
 
+internal enum TrackerType { UNIT3D, F3NIX }
+
 internal sealed record FromTrackerConfig(
+    TrackerType TrackerType,
     string Url,
     string ApiKey,
     bool SupportsFileNameSearch,
@@ -42,6 +45,9 @@ internal sealed record AppConfig(
 
         List<FromTrackerConfig> fromTrackers = cfg.TryGetValue("from_tracker", out var fromSections)
             ? [.. fromSections.Select(from => new FromTrackerConfig(
+                TrackerType: from.TryGetValue("type", out var typeStr) && typeStr.Equals("F3NIX", StringComparison.OrdinalIgnoreCase)
+                    ? TrackerType.F3NIX
+                    : TrackerType.UNIT3D,
                 Url: from["url"],
                 ApiKey: from["api_key"],
                 SupportsFileNameSearch: !from.TryGetValue("supports_file_name_search", out var sfns)

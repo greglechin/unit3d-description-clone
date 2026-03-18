@@ -1,6 +1,8 @@
 [from_tracker]
 url = https://tracker.cc
 api_key = 
+; Tracker API type. UNIT3D (default) or F3NIX.
+; type = UNIT3D
 ; Set to true if the tracker supports the file_name filter parameter on /api/torrents/filter.
 ; If false, torrents will be matched by TMDB ID instead.
 supports_file_name_search = true

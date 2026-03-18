@@ -9,14 +9,15 @@ using Unit3dDescriptionClone.Serialization;
 namespace Unit3dDescriptionClone.Services;
 
 internal sealed class DescriptionCloner(
-    Unit3dApiClient api,
+    Unit3dApiClient unit3dApi,
+    F3nixApiClient f3nixApi,
     Unit3dWebClient web,
     ImageRehoster imageRehoster,
     AppConfig config)
 {
     private const string CacheDir = "cache";
 
-    public async Task BackfillAsync(string releaseGroup, string uploader)
+    public async Task BackfillAsync(string releaseGroup, string uploader, bool skipRehosting = false)
     {
         Console.WriteLine($"Backfilling description for release group: {releaseGroup}, uploader: {uploader}");
         string? nextUrl = $"{config.ToTrackerUrl}/api/torrents/filter" +
@@ -24,7 +25,7 @@ internal sealed class DescriptionCloner(
 
         while (nextUrl is not null)
         {
-            var page = await api.GetTorrentsPageAsync(nextUrl);
+            var page = await unit3dApi.GetTorrentsPageAsync(nextUrl);
             foreach (var torrent in page.Data)
             {
                 var cacheFile = Path.Combine(CacheDir, $"{torrent.Id}.json");
@@ -34,7 +35,7 @@ internal sealed class DescriptionCloner(
                     continue;
                 }
 
-                await CloneAsync(torrent.Id);
+                await CloneAsync(torrent.Id, skipRehosting);
                 File.WriteAllText(cacheFile,
                     JsonSerializer.Serialize(torrent, AppJsonContext.Default.TorrentInfo));
             }
@@ -44,12 +45,12 @@ internal sealed class DescriptionCloner(
         }
     }
 
-    public async Task CloneAsync(string torrentId)
+    public async Task CloneAsync(string torrentId, bool skipRehosting = false)
     {
         Console.WriteLine($"Cloning description for torrent ID {torrentId}");
 
         Console.WriteLine($"Fetching torrent info from target tracker (ID {torrentId})...");
-        var targetTorrent = await api.GetTorrentAsync(torrentId);
+        var targetTorrent = await unit3dApi.GetTorrentAsync(torrentId);
         var lookupFile = targetTorrent!.Attributes.Files.FirstOrDefault()!;
         Console.WriteLine($"Torrent name: {targetTorrent.Attributes.Name}");
         Console.WriteLine($"Lookup file:  {lookupFile.Name}");
@@ -63,7 +64,8 @@ internal sealed class DescriptionCloner(
         Console.WriteLine($"Using source tracker: {fromTracker.Url}");
 
         Console.WriteLine("Searching for matching torrent on source tracker...");
-        TorrentInfo? sourceTorrent;
+        ISourceTrackerClient sourceClient = fromTracker.TrackerType == TrackerType.F3NIX ? f3nixApi : unit3dApi;
+        SourceTorrentResult? sourceResult;
         if (!fromTracker.SupportsFileNameSearch)
         {
             var tmdbId = targetTorrent.Attributes.TmdbId;
@@ -73,25 +75,28 @@ internal sealed class DescriptionCloner(
                 return;
             }
             Console.WriteLine($"Source tracker does not support file_name search — searching by TMDB ID {tmdbId}...");
-            sourceTorrent = await api.FindSourceTorrentByTmdbIdAsync(tmdbId.Value, lookupFile.Name, fromTracker);
+            sourceResult = await sourceClient.FindSourceTorrentByTmdbIdAsync(tmdbId.Value, lookupFile.Name, fromTracker);
         }
         else
         {
-            sourceTorrent = await api.FindSourceTorrentAsync(lookupFile.Name, fromTracker);
+            sourceResult = await sourceClient.FindSourceTorrentAsync(lookupFile.Name, fromTracker);
         }
-        if (sourceTorrent is null)
+        if (sourceResult is null)
         {
             Console.WriteLine("No matching torrent found on source tracker, aborting.");
             return;
         }
 
-        var description = new StringBuilder(sourceTorrent.Attributes.Description);
-        var mediaInfo = sourceTorrent.Attributes.MediaInfo;
+        var description = new StringBuilder(sourceResult.Description);
+        var mediaInfo = sourceResult.MediaInfo;
 
         StripLines(description);
 
-        if (!await RehostImagesAsync(description))
+        if (!skipRehosting && !await RehostImagesAsync(description))
             return;
+
+        if (skipRehosting)
+            Console.WriteLine("Skipping image rehosting (--no-rehost).");
 
         AppendDescriptionSuffix(description);
 
@@ -187,7 +192,7 @@ internal sealed class DescriptionCloner(
         var editHtml = await web.GetEditPageHtmlAsync(torrentId);
         var editForm = Unit3dWebClient.ParseEditPage(editHtml);
 
-        editForm.Fields["description"] = description;
+        editForm.Fields["description"] = $"[code]{description}[/code]";
         if (!string.IsNullOrEmpty(mediaInfo) &&
             string.IsNullOrWhiteSpace(editForm.Fields.GetValueOrDefault("mediainfo")))
             editForm.Fields["mediainfo"] = mediaInfo;
