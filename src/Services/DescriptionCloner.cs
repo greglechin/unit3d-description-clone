@@ -197,6 +197,9 @@ internal sealed class DescriptionCloner(
         // don't ask
         description = description.Replace("h:m:s", "h:​m:s", StringComparison.OrdinalIgnoreCase);
 
+        description = description.Replace("[hide", "[spoiler", StringComparison.OrdinalIgnoreCase);
+        description = description.Replace("[/hide]", "[/spoiler]", StringComparison.OrdinalIgnoreCase);
+
         editForm.Fields["description"] = $"[code]{description}[/code]";
         if (!string.IsNullOrEmpty(mediaInfo) &&
             string.IsNullOrWhiteSpace(editForm.Fields.GetValueOrDefault("mediainfo")))
