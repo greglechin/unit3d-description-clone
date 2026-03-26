@@ -27,6 +27,9 @@ totp_secret =
 [image_host]
 url = https://i.tracker.org
 api_key = 
+; Optional: URL to substitute when an image cannot be fetched after all retries.
+; If omitted, the clone is aborted when an image fails to download.
+; placeholder_image = https://i.tracker.org/placeholder.png
 
 ; Optional: remove lines from the source description that match any of the given patterns.
 ; Each pattern is a .NET regular expression (case-insensitive). Repeat the key for multiple patterns.

@@ -20,6 +20,7 @@ internal sealed record AppConfig(
     string ToTrackerTotpSecret,
     string ImageHostUrl,
     string ImageHostApiKey,
+    string ImageHostPlaceholder,
     IReadOnlyDictionary<string, string> KnownImages,
     IReadOnlyList<Regex> StripLinePatterns,
     string DescriptionAppend)
@@ -71,6 +72,7 @@ internal sealed record AppConfig(
             ToTrackerTotpSecret: to.GetValueOrDefault("totp_secret", ""),
             ImageHostUrl: img["url"],
             ImageHostApiKey: img["api_key"],
+            ImageHostPlaceholder: img.GetValueOrDefault("placeholder_image", ""),
             KnownImages: knownImages,
             StripLinePatterns: stripLinePatterns,
             DescriptionAppend: descriptionAppend);

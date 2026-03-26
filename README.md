@@ -60,6 +60,9 @@ totp_secret = <Base32-encoded TOTP secret, leave blank if 2FA is not enabled>
 [image_host]
 url = https://images.example
 api_key = <Image host API key>
+; Optional: URL to substitute when an image cannot be fetched after all retries.
+; If omitted, the clone is aborted when an image fails to download.
+; placeholder_image = https://images.example/placeholder.png
 
 ; Optional: map source image URLs directly to already-rehosted URLs.
 ; Useful when running the tool repeatedly and some images are already uploaded.

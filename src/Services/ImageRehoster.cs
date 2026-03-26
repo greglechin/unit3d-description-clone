@@ -15,7 +15,14 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
 
         var imageResp = await FetchWithRetryAsync(imageUrl);
         if (imageResp is null)
+        {
+            if (!string.IsNullOrEmpty(config.ImageHostPlaceholder))
+            {
+                Console.WriteLine($"    Using placeholder image: {config.ImageHostPlaceholder}");
+                return config.ImageHostPlaceholder;
+            }
             return null;
+        }
 
         var contentType = imageResp.Content.Headers.ContentType?.MediaType ?? "";
         var rawStream = await imageResp.Content.ReadAsStreamAsync();
