@@ -12,14 +12,26 @@ remain accessible on the target tracker.
    section to select the appropriate source tracker.
 3. It locates a matching torrent on the selected source tracker using one of two strategies
    (see [Source tracker lookup](#source-tracker-lookup) below).
-4. The description is copied from the source torrent.
+4. The description and MediaInfo are copied from the source torrent.
 5. Any lines in the description matching a configured `[strip_lines]` pattern are removed.
-6. Every image URL found in the BBCode description is downloaded and re-uploaded to
-   the configured image host. SVG images are converted to PNG before uploading.
-   (This step can be skipped with `--no-rehost`.)
-7. The optional `[description_append]` config section is appended to the final description.
-8. The tool logs in to the target tracker (caching the session in `cache/`), opens the
-   torrent edit page, fills in the new description, and submits the form.
+6. Several BBCode transformations are applied for compatibility with the target tracker:
+   - `[hide]`/`[/hide]` tags are converted to `[spoiler]`/`[/spoiler]`.
+   - `[align=left|center|right]` tags are normalized to `[left]`, `[center]`, `[right]`.
+   - A zero-width space is inserted into `h:m:s` timestamps to prevent unwanted BBCode
+     interpretation.
+7. The description is wrapped in `[code]...[/code]`.
+8. The existing description on the target torrent is preserved in a
+   `[spoiler=original info]...[/spoiler]` block appended after the new description. If
+   such a block already exists from a previous run, it is reused rather than nested.
+9. Every image URL found in `[img]`, `[url][img]`, and `[comparison]` BBCode tags is
+   downloaded and re-uploaded to the configured image host. SVG images are converted to
+   PNG before uploading. Images listed in `[known_images]` are substituted directly
+   without re-uploading. (This step can be skipped with `--no-rehost`.)
+10. The optional `[description_append]` config section is appended to the final description.
+11. The tool logs in to the target tracker (caching the session in `cache/`), opens the
+    torrent edit page, fills in the new description, and submits the form. If the source
+    torrent provided MediaInfo and the target form's MediaInfo field is empty, it is also
+    populated.
 
 ## Configuration
 
