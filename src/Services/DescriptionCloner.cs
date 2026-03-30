@@ -209,8 +209,8 @@ internal sealed class DescriptionCloner(
 
             if (hrefUrl is not null)
             {
+                description.Replace("[url=" + hrefUrl + "]", "[url=" + newUrl + "]");
                 description.Replace(imgUrl, newUrl + $"?variant=thumb");
-                description.Replace(hrefUrl, newUrl);
             } 
             else
             {

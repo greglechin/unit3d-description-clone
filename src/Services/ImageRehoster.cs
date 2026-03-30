@@ -99,7 +99,6 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
                 resp.EnsureSuccessStatusCode();
 
                 var contentType = resp.Content.Headers.GetValues($"Content-Type").First();
-
                 if (contentType is null)
                     return null;
 
