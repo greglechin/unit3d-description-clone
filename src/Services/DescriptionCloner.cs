@@ -199,13 +199,22 @@ internal sealed class DescriptionCloner(
                 continue;
             }
 
-            var newUrl = await imageRehoster.RehostAsync(imgUrl);
+            var fetchUrl = imgUrl;
+            if (hrefUrl is not null && await imageRehoster.CheckUrlIsImage(hrefUrl))
+                fetchUrl = hrefUrl;
+
+            var newUrl = await imageRehoster.RehostAsync(fetchUrl);
             if (newUrl is null)
                 return false;
 
-            description.Replace(imgUrl, newUrl);
             if (hrefUrl is not null)
+            {
+                description.Replace(imgUrl, newUrl + $"?variant=thumb");
                 description.Replace(hrefUrl, newUrl);
+            } else
+            {
+                description.Replace(imgUrl, newUrl);
+            }
         }
 
         return true;

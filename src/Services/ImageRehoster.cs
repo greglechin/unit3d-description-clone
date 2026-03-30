@@ -60,6 +60,11 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
         return newUrl;
     }
 
+    public async Task<bool> CheckUrlIsImage(string imageUrl)
+    {
+        return await FetchTypeWithRetryAsync(imageUrl) == "image";
+    }
+
     private async Task<HttpResponseMessage?> FetchWithRetryAsync(string imageUrl)
     {
         for (var attempt = 0; attempt <= FetchRetries; attempt++)
@@ -78,6 +83,36 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
             catch (Exception)
             {
                 Console.WriteLine($"    Failed to fetch image after {FetchRetries + 1} attempts, aborting.");
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private async Task<String?> FetchTypeWithRetryAsync(string imageUrl)
+    {
+        for (var attempt = 0; attempt <= FetchRetries; attempt++)
+        {
+            try
+            {
+                var resp = await client.SendAsync(new HttpRequestMessage(HttpMethod.Head, imageUrl));
+                resp.EnsureSuccessStatusCode();
+
+                var contentType = resp.Content.Headers.GetValues($"Content-Type").First();
+
+                if (contentType is null)
+                    return null;
+
+                return contentType.Split('/').First();
+            }
+            catch (TaskCanceledException) when (attempt < FetchRetries)
+            {
+                Console.WriteLine($"    Timeout fetching type, retrying ({attempt + 1}/{FetchRetries})...");
+                await Task.Delay(1000);
+            }
+            catch (Exception)
+            {
+                Console.WriteLine($"    Failed to fetch type after {FetchRetries + 1} attempts, aborting.");
                 return null;
             }
         }
