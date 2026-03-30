@@ -200,8 +200,9 @@ internal sealed class DescriptionCloner(
             }
 
             var fetchUrl = imgUrl;
-            if (hrefUrl is not null && await imageRehoster.CheckUrlIsImage(hrefUrl))
-                fetchUrl = hrefUrl;
+            var (hrefIsImage, hrefImageUrl) = await imageRehoster.GetImageFromHref(hrefUrl!);
+            if (hrefIsImage)
+                fetchUrl = hrefImageUrl;
 
             var newUrl = await imageRehoster.RehostAsync(fetchUrl);
             if (newUrl is null)

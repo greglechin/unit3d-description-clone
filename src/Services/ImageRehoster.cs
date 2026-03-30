@@ -60,9 +60,23 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
         return newUrl;
     }
 
-    public async Task<bool> CheckUrlIsImage(string imageUrl)
+    public async Task<(bool IsImage, string ImageUrl)> GetImageFromHref(string imageUrl)
     {
-        return await FetchTypeWithRetryAsync(imageUrl) == "image";
+        if (imageUrl.Contains("imgbox", StringComparison.OrdinalIgnoreCase))
+        {
+            var resp = await FetchWithRetryAsync(imageUrl);
+            var content = await resp!.Content.ReadAsStringAsync();
+            var doc = new HtmlAgilityPack.HtmlDocument();
+            doc.LoadHtml(content);
+            var img = doc.DocumentNode.SelectSingleNode("//img[contains(concat(' ', normalize-space(@class), ' '), ' image-content ')]");
+            var src = img?.GetAttributeValue("src", null);
+            return (src is not null, src ?? "");
+        }
+        else
+        {
+            var type = await FetchTypeWithRetryAsync(imageUrl);
+            return (type == "image", type == "image" ? imageUrl : "");
+        }
     }
 
     private async Task<HttpResponseMessage?> FetchWithRetryAsync(string imageUrl)
