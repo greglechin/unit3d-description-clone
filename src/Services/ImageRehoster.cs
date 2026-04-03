@@ -49,7 +49,7 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
         uploadReq.Content = new MultipartFormDataContent
         {
             { fileContent, "files[]", fileName },
-            { new StringContent("user"), "source_type" }
+            { new StringContent("description"), "source_type" }
         };
 
         var resp = await client.SendAsync(uploadReq);
