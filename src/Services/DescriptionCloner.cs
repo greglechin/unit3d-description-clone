@@ -215,7 +215,7 @@ internal sealed class DescriptionCloner(
             {
                 ReplaceIgnoreCase(description, "[url=" + hrefUrl + "]", "[url=" + newImageUrls.Full + "]");
                 description.Replace(imgUrl, newImageUrls.Thumbnail);
-            } 
+            }
             else
             {
                 description.Replace(imgUrl, newImageUrls.Full);
