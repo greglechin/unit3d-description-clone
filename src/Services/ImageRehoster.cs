@@ -21,9 +21,9 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
             {
                 Console.WriteLine($"    Using placeholder image: {config.ImageHostPlaceholder}");
 
-                return new RehostedImage() 
-                { 
-                    Full = config.ImageHostPlaceholder, 
+                return new RehostedImage()
+                {
+                    Full = config.ImageHostPlaceholder,
                     Thumbnail = config.ImageHostPlaceholder
                 };
             }
@@ -67,14 +67,16 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
         Console.WriteLine($"    -> {newThumbnailUrl}");
         return new RehostedImage()
         {
-            Full = newFullUrl, 
+            Full = newFullUrl,
             Thumbnail = newThumbnailUrl
         };
     }
 
     public async Task<(bool IsImage, string ImageUrl)> GetImageFromHref(string imageUrl)
     {
-        if (imageUrl.Contains("ibb.co", StringComparison.OrdinalIgnoreCase))
+        if (imageUrl.Contains("ibb.co", StringComparison.OrdinalIgnoreCase)
+            || (imageUrl.Contains("beyondhd.co/image", StringComparison.OrdinalIgnoreCase)
+                && !imageUrl.Contains("beyondhd.co/images", StringComparison.OrdinalIgnoreCase)))
         {
             var resp = await FetchWithRetryAsync(imageUrl);
             var content = await resp!.Content.ReadAsStringAsync();
