@@ -12,6 +12,9 @@ internal sealed class F3nixSearchItem
 
     [JsonPropertyName("tmdb_id")]
     public string? TmdbId { get; set; }
+
+    [JsonPropertyName("download_url")]
+    public string? DownloadUrl { get; set; }
 }
 
 internal sealed class F3nixSearchResponse
@@ -38,6 +41,9 @@ internal sealed class F3nixDetailItem
 
     [JsonPropertyName("tmdb_id")]
     public string? TmdbId { get; set; }
+
+    [JsonPropertyName("download_url")]
+    public string? DownloadUrl { get; set; }
 }
 
 internal sealed class F3nixDetailsResponse

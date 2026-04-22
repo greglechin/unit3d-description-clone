@@ -8,6 +8,7 @@ internal sealed record FromTrackerConfig(
     TrackerType TrackerType,
     string Url,
     string ApiKey,
+    string RssKey,
     bool SupportsFileNameSearch,
     IReadOnlyList<string> ReleaseGroups);
 
@@ -51,6 +52,7 @@ internal sealed record AppConfig(
                     : TrackerType.UNIT3D,
                 Url: from["url"],
                 ApiKey: from["api_key"],
+                RssKey: from.GetValueOrDefault("rss_key", ""),
                 SupportsFileNameSearch: !from.TryGetValue("supports_file_name_search", out var sfns)
                     || sfns.Equals("true", StringComparison.OrdinalIgnoreCase),
                 ReleaseGroups: from.TryGetValue("release_group", out var rg)

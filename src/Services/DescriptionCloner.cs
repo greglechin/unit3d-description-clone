@@ -55,6 +55,12 @@ internal sealed class DescriptionCloner(
         Console.WriteLine($"Torrent name: {targetTorrent.Attributes.Name}");
         Console.WriteLine($"Lookup file:  {lookupFile.Name}");
 
+        if (IsTrumpableName(targetTorrent.Attributes.Name))
+        {
+            Console.WriteLine("Torrent already marked -TRUMPABLE, skipping.");
+            return;
+        }
+
         var fromTracker = config.GetFromTrackerForTorrent(targetTorrent.Attributes.Name);
         if (fromTracker is null)
         {
@@ -84,6 +90,18 @@ internal sealed class DescriptionCloner(
         if (sourceResult is null)
         {
             Console.WriteLine("No matching torrent found on source tracker, aborting.");
+            return;
+        }
+
+        var isTrumpable = IsTrumpable(targetTorrent.Attributes.Files, sourceResult.Files);
+        if (isTrumpable)
+        {
+            await web.EnsureLoggedInAsync();
+            await SubmitEditAsync(
+                torrentId,
+                targetTorrent.Attributes.Description,
+                targetTorrent.Attributes.MediaInfo,
+                GetTrumpableName(targetTorrent.Attributes.Name));
             return;
         }
 
@@ -134,8 +152,74 @@ internal sealed class DescriptionCloner(
         AppendDescriptionSuffix(description);
 
         await web.EnsureLoggedInAsync();
-        await SubmitEditAsync(torrentId, description.ToString(), mediaInfo);
+        await SubmitEditAsync(torrentId, description.ToString(), mediaInfo, null);
     }
+
+    private static bool IsTrumpable(IReadOnlyList<TorrentFile> targetFiles, IReadOnlyList<TorrentFile> sourceFiles)
+    {
+        var targetMkvFiles = targetFiles
+            .Where(file => file.Name.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var sourceMkvFiles = sourceFiles
+            .Where(file => file.Name.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        Console.WriteLine($"Validating {targetMkvFiles.Count} target .mkv file(s) against source torrent...");
+        if (sourceMkvFiles.Count != targetMkvFiles.Count)
+        {
+            Console.WriteLine($"  Source .mkv count mismatch: target={targetMkvFiles.Count} source={sourceMkvFiles.Count}");
+            return true;
+        }
+
+        foreach (var targetFile in targetMkvFiles)
+        {
+            var sourceFile = FindSourceFile(targetFile.Name, sourceMkvFiles);
+            if (sourceFile is null)
+            {
+                Console.WriteLine($"  Source .mkv missing: {targetFile.Name}");
+                return true;
+            }
+
+            if (sourceFile.Size != targetFile.Size)
+            {
+                Console.WriteLine($"  Source .mkv size mismatch: {targetFile.Name} target={targetFile.Size} source={sourceFile.Size}");
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static TorrentFile? FindSourceFile(string targetName, IReadOnlyList<TorrentFile> sourceFiles)
+    {
+        var normalizedTarget = NormalizeTorrentPath(targetName);
+        var exact = sourceFiles.FirstOrDefault(file =>
+            NormalizeTorrentPath(file.Name).Equals(normalizedTarget, StringComparison.OrdinalIgnoreCase));
+        if (exact is not null)
+            return exact;
+
+        var targetFileName = GetTorrentFileName(normalizedTarget);
+        var basenameMatches = sourceFiles
+            .Where(file => GetTorrentFileName(NormalizeTorrentPath(file.Name)).Equals(targetFileName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        return basenameMatches.Count == 1 ? basenameMatches[0] : null;
+    }
+
+    private static string NormalizeTorrentPath(string path) => path.Replace('\\', '/').TrimStart('/');
+
+    private static string GetTorrentFileName(string path)
+    {
+        var slashIndex = path.LastIndexOf('/');
+        return slashIndex < 0 ? path : path[(slashIndex + 1)..];
+    }
+
+    private static bool IsTrumpableName(string name) =>
+        name.Contains("-TRUMPABLE", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetTrumpableName(string originalName) =>
+        IsTrumpableName(originalName)
+            ? originalName
+            : $"{originalName}-TRUMPABLE";
 
     private void StripLines(StringBuilder description)
     {
@@ -234,14 +318,15 @@ internal sealed class DescriptionCloner(
         description.Append(config.DescriptionAppend);
     }
 
-    private async Task SubmitEditAsync(string torrentId, string description, string? mediaInfo)
+    private async Task SubmitEditAsync(string torrentId, string? description, string? mediaInfo, string? nameOverride)
     {
         var editPageUrl = $"{config.ToTrackerUrl}/torrents/{torrentId}/edit";
         Console.WriteLine($"Fetching edit page for torrent {torrentId}...");
         var editHtml = await web.GetEditPageHtmlAsync(torrentId);
         var editForm = Unit3dWebClient.ParseEditPage(editHtml);
 
-        editForm.Fields["description"] = description;
+        if (description is not null)
+            editForm.Fields["description"] = description;
 
         if (!string.IsNullOrEmpty(mediaInfo) &&
             string.IsNullOrWhiteSpace(editForm.Fields.GetValueOrDefault("mediainfo")))
@@ -254,6 +339,11 @@ internal sealed class DescriptionCloner(
         var formName = LayeredHtmlDecode(editForm.Fields.GetValueOrDefault("name") ?? "");
         if (!string.IsNullOrWhiteSpace(formName))
             editForm.Fields["name"] = formName;
+        if (!string.IsNullOrWhiteSpace(nameOverride))
+        {
+            editForm.Fields["name"] = nameOverride;
+            Console.WriteLine($"Marking target torrent trumpable: {nameOverride}");
+        }
 
         RemoveNonExistentExternalIds(editForm.Fields, editForm.AlpineExists);
         editForm.Fields.Remove("_token");
@@ -276,6 +366,25 @@ internal sealed class DescriptionCloner(
         var patchResp = await web.SubmitEditFormAsync(torrentId, editPageUrl, patchData);
         Console.WriteLine(
             $"Patch response: {(int)patchResp.StatusCode} {patchResp.StatusCode} -> {patchResp.Headers.Location}");
+
+        var redirectUrl = ToAbsolute(patchResp.Headers.Location?.ToString(), config.ToTrackerUrl);
+        if (redirectUrl?.Equals(editPageUrl, StringComparison.OrdinalIgnoreCase) == true)
+        {
+            var errorHtml = await web.GetPageHtmlAsync(redirectUrl);
+            var errors = Unit3dWebClient.ExtractErrors(errorHtml);
+            Console.WriteLine("Patch failed: tracker redirected back to edit page.");
+            if (errors.Count == 0)
+            {
+                Console.WriteLine("  No validation error text found on edit page.");
+            }
+            else
+            {
+                foreach (var error in errors)
+                    Console.WriteLine($"  {error}");
+            }
+
+            throw new InvalidOperationException("Torrent edit failed.");
+        }
     }
 
     private static StringBuilder ReplaceIgnoreCase(StringBuilder sb, string oldValue, string newValue)
@@ -292,6 +401,14 @@ internal sealed class DescriptionCloner(
         while ((decodedFormValue = HttpUtility.HtmlDecode(formValue)) != formValue)
             formValue = decodedFormValue;
         return formValue;
+    }
+
+    private static string? ToAbsolute(string? url, string baseUrl)
+    {
+        if (url is null) return null;
+        return url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? url
+            : baseUrl + (url.StartsWith('/') ? url : "/" + url);
     }
 
     private static readonly HashSet<string> KnownAlignValues =

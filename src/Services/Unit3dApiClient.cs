@@ -85,12 +85,31 @@ internal sealed class Unit3dApiClient(HttpClient client, AppConfig config) : ISo
     async Task<SourceTorrentResult?> ISourceTrackerClient.FindSourceTorrentAsync(string fileName, FromTrackerConfig fromTracker)
     {
         var t = await FindSourceTorrentAsync(fileName, fromTracker);
-        return t is null ? null : new SourceTorrentResult(t.Attributes.Description, t.Attributes.MediaInfo);
+        return t is null
+            ? null
+            : new SourceTorrentResult(t.Id, t.Attributes.Description, t.Attributes.MediaInfo, await GetSourceFilesAsync(t.Id, fromTracker));
     }
 
     async Task<SourceTorrentResult?> ISourceTrackerClient.FindSourceTorrentByTmdbIdAsync(int tmdbId, string fileName, FromTrackerConfig fromTracker)
     {
         var t = await FindSourceTorrentByTmdbIdAsync(tmdbId, fileName, fromTracker);
-        return t is null ? null : new SourceTorrentResult(t.Attributes.Description, t.Attributes.MediaInfo);
+        return t is null
+            ? null
+            : new SourceTorrentResult(t.Id, t.Attributes.Description, t.Attributes.MediaInfo, await GetSourceFilesAsync(t.Id, fromTracker));
+    }
+
+    private async Task<IReadOnlyList<TorrentFile>> GetSourceFilesAsync(string torrentId, FromTrackerConfig fromTracker)
+    {
+        Console.WriteLine($"Downloading source torrent file (ID {torrentId})...");
+        return TorrentFileParser.GetFiles(await DownloadTorrentFileAsync(torrentId, fromTracker));
+    }
+
+    private async Task<byte[]> DownloadTorrentFileAsync(string torrentId, FromTrackerConfig fromTracker)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Get, $"{fromTracker.Url}/torrents/download/{torrentId}");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", fromTracker.ApiKey);
+        var resp = await client.SendAsync(req);
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadAsByteArrayAsync();
     }
 }

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.RegularExpressions;
+using System.Web;
 using HtmlAgilityPack;
 using OtpNet;
 using Unit3dDescriptionClone.Config;
@@ -34,6 +35,9 @@ internal sealed class Unit3dWebClient(
     public async Task<string> GetEditPageHtmlAsync(string torrentId)
         => await autoRedirectClient.GetStringAsync($"{config.ToTrackerUrl}/torrents/{torrentId}/edit");
 
+    public async Task<string> GetPageHtmlAsync(string url)
+        => await autoRedirectClient.GetStringAsync(url);
+
     public async Task<HttpResponseMessage> SubmitEditFormAsync(
         string torrentId,
         string editPageUrl,
@@ -49,6 +53,25 @@ internal sealed class Unit3dWebClient(
         Captcha: ExtractCaptcha(html),
         Fields: ExtractFormFields(html),
         AlpineExists: ParseAlpineExists(html));
+
+    public static IReadOnlyList<string> ExtractErrors(string html)
+    {
+        var doc = ParseHtml(html);
+        var errorNodes = doc.DocumentNode.SelectNodes(
+            "//*[contains(concat(' ', normalize-space(@class), ' '), ' form__error ') " +
+            "or contains(concat(' ', normalize-space(@class), ' '), ' invalid-feedback ') " +
+            "or contains(concat(' ', normalize-space(@class), ' '), ' alert--danger ')]");
+
+        if (errorNodes is null)
+            return [];
+
+        return errorNodes
+            .Select(n => HttpUtility.HtmlDecode(n.InnerText))
+            .Select(t => Regex.Replace(t, @"\s+", " ").Trim())
+            .Where(t => t.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
 
     private async Task LoginAsync()
     {
