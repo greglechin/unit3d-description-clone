@@ -52,8 +52,9 @@ internal sealed class DescriptionCloner(
         Console.WriteLine($"Fetching torrent info from target tracker (ID {torrentId})...");
         var targetTorrent = await unit3dApi.GetTorrentAsync(torrentId);
         var lookupFile = targetTorrent!.Attributes.Files.FirstOrDefault()!;
+        var lookupFileName = Path.GetFileName(lookupFile.Name);
         Console.WriteLine($"Torrent name: {targetTorrent.Attributes.Name}");
-        Console.WriteLine($"Lookup file:  {lookupFile.Name}");
+        Console.WriteLine($"Lookup file: {lookupFileName}");
 
         if (IsTrumpableName(targetTorrent.Attributes.Name))
         {
@@ -81,11 +82,11 @@ internal sealed class DescriptionCloner(
                 return;
             }
             Console.WriteLine($"Source tracker does not support file_name search — searching by TMDB ID {tmdbId}...");
-            sourceResult = await sourceClient.FindSourceTorrentByTmdbIdAsync(tmdbId.Value, lookupFile.Name, fromTracker);
+            sourceResult = await sourceClient.FindSourceTorrentByTmdbIdAsync(tmdbId.Value, lookupFileName, fromTracker);
         }
         else
         {
-            sourceResult = await sourceClient.FindSourceTorrentAsync(lookupFile.Name, fromTracker);
+            sourceResult = await sourceClient.FindSourceTorrentAsync(lookupFileName, fromTracker);
         }
         if (sourceResult is null)
         {
@@ -157,32 +158,25 @@ internal sealed class DescriptionCloner(
 
     private static bool IsTrumpable(IReadOnlyList<TorrentFile> targetFiles, IReadOnlyList<TorrentFile> sourceFiles)
     {
-        var targetMkvFiles = targetFiles
-            .Where(file => file.Name.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        var sourceMkvFiles = sourceFiles
-            .Where(file => file.Name.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        Console.WriteLine($"Validating {targetMkvFiles.Count} target .mkv file(s) against source torrent...");
-        if (sourceMkvFiles.Count != targetMkvFiles.Count)
+        Console.WriteLine($"Validating {targetFiles.Count} target file(s) against source torrent...");
+        if (sourceFiles.Count < targetFiles.Count)
         {
-            Console.WriteLine($"  Source .mkv count mismatch: target={targetMkvFiles.Count} source={sourceMkvFiles.Count}");
+            Console.WriteLine($"  Source file count mismatch: target={targetFiles.Count} source={sourceFiles.Count}");
             return true;
         }
 
-        foreach (var targetFile in targetMkvFiles)
+        foreach (var targetFile in targetFiles)
         {
-            var sourceFile = FindSourceFile(targetFile.Name, sourceMkvFiles);
+            var sourceFile = FindSourceFile(targetFile.Name, sourceFiles);
             if (sourceFile is null)
             {
-                Console.WriteLine($"  Source .mkv missing: {targetFile.Name}");
+                Console.WriteLine($"  Source file missing: {targetFile.Name}");
                 return true;
             }
 
             if (sourceFile.Size != targetFile.Size)
             {
-                Console.WriteLine($"  Source .mkv size mismatch: {targetFile.Name} target={targetFile.Size} source={sourceFile.Size}");
+                Console.WriteLine($"  Source file size mismatch: {targetFile.Name} target={targetFile.Size} source={sourceFile.Size}");
                 return true;
             }
         }
