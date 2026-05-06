@@ -33,7 +33,8 @@ remain accessible on the target tracker.
    downloaded and re-uploaded to the configured image host. SVG images are converted to
    PNG before uploading. Images listed in `[known_images]` are substituted directly
    without re-uploading. (This step can be skipped with `--no-rehost`.)
-12. The optional `[description_append]` config section is appended to the final description.
+12. The optional `[description_append]` config section is appended to the final description
+    unless skipped with `--no-append`.
 13. The tool logs in to the target tracker (caching the session in `cache/`), opens the
     torrent edit page, fills in the new description, and submits the form. If the source
     torrent provided MediaInfo and the target form's MediaInfo field is empty, it is also
@@ -110,13 +111,13 @@ api_key = <Image host API key>
 Clone a single torrent description by its ID on the target tracker:
 
 ```
-unit3d-description-clone [--no-rehost] <torrent-id>
+unit3d-description-clone [--no-rehost] [--no-append] <torrent-id>
 ```
 
 Backfill all torrents on the target tracker whose name matches a release group, uploaded by a specific user:
 
 ```
-unit3d-description-clone [--no-rehost] backfill "<release group name>" "<uploader username>"
+unit3d-description-clone [--no-rehost] [--no-append] backfill "<release group name>" "<uploader username>"
 ```
 
 ### Flags
@@ -124,6 +125,7 @@ unit3d-description-clone [--no-rehost] backfill "<release group name>" "<uploade
 | Flag | Description |
 |------|-------------|
 | `--no-rehost` | Skip image rehosting. Images in the description are left pointing at their original URLs. |
+| `--no-append` | Skip appending the optional `[description_append]` config section. |
 
 In backfill mode the tool filters the target tracker by both torrent name and uploader, paginates through all matching results and processes each
 torrent. A JSON file is written to `cache/<id>.json` once a torrent is processed so

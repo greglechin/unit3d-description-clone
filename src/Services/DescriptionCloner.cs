@@ -17,7 +17,7 @@ internal sealed class DescriptionCloner(
 {
     private const string CacheDir = "cache";
 
-    public async Task BackfillAsync(string releaseGroup, string uploader, bool skipRehosting = false)
+    public async Task BackfillAsync(string releaseGroup, string uploader, bool skipRehosting = false, bool skipAppend = false)
     {
         Console.WriteLine($"Backfilling description for release group: {releaseGroup}, uploader: {uploader}");
         string? nextUrl = $"{config.ToTrackerUrl}/api/torrents/filter" +
@@ -35,7 +35,7 @@ internal sealed class DescriptionCloner(
                     continue;
                 }
 
-                await CloneAsync(torrent.Id, skipRehosting);
+                await CloneAsync(torrent.Id, skipRehosting, skipAppend);
                 File.WriteAllText(cacheFile,
                     JsonSerializer.Serialize(torrent, AppJsonContext.Default.TorrentInfo));
             }
@@ -45,7 +45,7 @@ internal sealed class DescriptionCloner(
         }
     }
 
-    public async Task CloneAsync(string torrentId, bool skipRehosting = false)
+    public async Task CloneAsync(string torrentId, bool skipRehosting = false, bool skipAppend = false)
     {
         Console.WriteLine($"Cloning description for torrent ID {torrentId}");
 
@@ -150,7 +150,10 @@ internal sealed class DescriptionCloner(
         if (skipRehosting)
             Console.WriteLine("Skipping image rehosting (--no-rehost).");
 
-        AppendDescriptionSuffix(description);
+        if (skipAppend)
+            Console.WriteLine("Skipping description append (--no-append).");
+        else
+            AppendDescriptionSuffix(description);
 
         await web.EnsureLoggedInAsync();
         await SubmitEditAsync(torrentId, description.ToString(), mediaInfo, null);
