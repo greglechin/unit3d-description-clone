@@ -233,10 +233,10 @@ internal sealed class DescriptionCloner(
         var str = description.ToString();
 
         var urlWrappedImgRegex = new Regex(
-            @"\[url=(?<href>[^\]]*)\]\[img(?:=[^\]]*)?\](?<img>[^\[]*)\[/img\]\[/url\]",
+            @"\[url=(?<href>[^\]]*)\]\[img\b[^\]]*\](?<img>[^\[]*)\[/img\]\[/url\]",
             RegexOptions.IgnoreCase);
         var plainImgRegex = new Regex(
-            @"\[img(?:=[^\]]*)?\](?<img>[^\[]*)\[/img\]",
+            @"\[img\b[^\]]*\](?<img>[^\[]*)\[/img\]",
             RegexOptions.IgnoreCase);
         var comparisonRegex = new Regex(
             @"\[comparison[^\]]*\](?<content>.*?)\[/comparison\]",
