@@ -106,8 +106,10 @@ internal sealed class Unit3dApiClient(HttpClient client, AppConfig config) : ISo
 
     private async Task<byte[]> DownloadTorrentFileAsync(string torrentId, FromTrackerConfig fromTracker)
     {
-        var req = new HttpRequestMessage(HttpMethod.Get, $"{fromTracker.Url}/torrents/download/{torrentId}");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", fromTracker.ApiKey);
+        var detailReq = new HttpRequestMessage(HttpMethod.Get, $"{fromTracker.Url}/api/torrents/{torrentId}");
+        detailReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", fromTracker.ApiKey);
+        var torrent = await (await client.SendAsync(detailReq)).Content.ReadFromJsonAsync(AppJsonContext.Default.TorrentInfo);
+        var req = new HttpRequestMessage(HttpMethod.Get, torrent?.Attributes.DownloadLink);
         var resp = await client.SendAsync(req);
         resp.EnsureSuccessStatusCode();
         return await resp.Content.ReadAsByteArrayAsync();
