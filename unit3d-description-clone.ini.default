@@ -3,8 +3,10 @@ url = https://tracker.cc
 api_key = 
 ; Optional for F3NIX. Required when you need download_url in API responses.
 rss_key =
-; Tracker API type. UNIT3D (default) or F3NIX.
+; Tracker API type. UNIT3D (default), F3NIX, or TORZNAB.
 ; type = UNIT3D
+; For TORZNAB: use embedded NFO/comment metadata from downloaded .torrent as description when available.
+grab_nfo_from_torrent_file = false
 ; Set to true if the tracker supports the file_name filter parameter on /api/torrents/filter.
 ; If false, torrents will be matched by TMDB ID instead.
 supports_file_name_search = true
@@ -18,6 +20,7 @@ release_group = GROUP-B
 ;url = https://tracker2.cc
 ;api_key =
 ;rss_key =
+;grab_nfo_from_torrent_file = false
 ;release_group = GROUP-C
 
 [to_tracker]

@@ -11,6 +11,7 @@ namespace Unit3dDescriptionClone.Services;
 internal sealed class DescriptionCloner(
     Unit3dApiClient unit3dApi,
     F3nixApiClient f3nixApi,
+    TorznabApiClient torznabApi,
     Unit3dWebClient web,
     ImageRehoster imageRehoster,
     AppConfig config)
@@ -71,7 +72,12 @@ internal sealed class DescriptionCloner(
         Console.WriteLine($"Using source tracker: {fromTracker.Url}");
 
         Console.WriteLine("Searching for matching torrent on source tracker...");
-        ISourceTrackerClient sourceClient = fromTracker.TrackerType == TrackerType.F3NIX ? f3nixApi : unit3dApi;
+        ISourceTrackerClient sourceClient = fromTracker.TrackerType switch
+        {
+            TrackerType.F3NIX => f3nixApi,
+            TrackerType.TORZNAB => torznabApi,
+            _ => unit3dApi,
+        };
         SourceTorrentResult? sourceResult;
         if (!fromTracker.SupportsFileNameSearch)
         {

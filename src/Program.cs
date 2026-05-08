@@ -25,9 +25,10 @@ using var autoRedirectClient = HttpClientFactory.Create(cookies, followRedirects
 
 var unit3dApi = new Unit3dApiClient(autoRedirectClient, config);
 var f3nixApi = new F3nixApiClient(autoRedirectClient);
+var torznabApi = new TorznabApiClient(autoRedirectClient);
 var web = new Unit3dWebClient(noRedirectClient, autoRedirectClient, cookies, config);
 var imageRehoster = new ImageRehoster(autoRedirectClient, config);
-var cloner = new DescriptionCloner(unit3dApi, f3nixApi, web, imageRehoster, config);
+var cloner = new DescriptionCloner(unit3dApi, f3nixApi, torznabApi, web, imageRehoster, config);
 
 if (positional[0] == "backfill")
     await cloner.BackfillAsync(positional[1], positional[2], skipRehosting, skipAppend);

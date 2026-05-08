@@ -35,6 +35,13 @@ internal static class TorrentFileParser
         ];
     }
 
+    public static string? GetNfo(byte[] torrentFile)
+    {
+        var (torrent, _) = BEncodedDictionary.DecodeTorrent(torrentFile);
+        var metadataDescription = TryGetNestedString(torrent, "metadata", "description")!;
+        return NormalizeNfo(metadataDescription);
+    }
+
     private static BEncodedDictionary GetDictionary(BEncodedDictionary dictionary, string key) =>
         (BEncodedDictionary)dictionary[(BEncodedString)key];
 
@@ -43,4 +50,17 @@ internal static class TorrentFileParser
 
     private static string GetString(BEncodedDictionary dictionary, string key) =>
         ((BEncodedString)dictionary[(BEncodedString)key]).Text;
+
+    private static string? TryGetString(BEncodedDictionary dictionary, string key) =>
+        dictionary.TryGetValue((BEncodedString)key, out var value) && value is BEncodedString str
+            ? str.Text
+            : null;
+
+    private static string? TryGetNestedString(BEncodedDictionary dictionary, string dictionaryKey, string stringKey) =>
+        dictionary.TryGetValue((BEncodedString)dictionaryKey, out var value) && value is BEncodedDictionary nested
+            ? TryGetString(nested, stringKey)
+            : null;
+
+    private static string NormalizeNfo(string value) =>
+        value.Trim().Replace("[/size][/color]", "\n[/size][/color]", StringComparison.Ordinal);
 }

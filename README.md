@@ -54,8 +54,11 @@ url = https://source-tracker.example
 api_key = <source API key>
 ; Optional for F3NIX. Required for download_url in API responses.
 rss_key = <source RSS key>
-; API type: UNIT3D (default) or F3NIX.
+; API type: UNIT3D (default), F3NIX, or TORZNAB.
 ; type = UNIT3D
+; Optional for TORZNAB. When true, use embedded NFO/comment metadata from the
+; downloaded .torrent as the source description when available.
+grab_nfo_from_torrent_file = false
 ; One or more release group names (repeated keys). The torrent name is checked for a
 ; case-insensitive substring match against each value. The first matching section is used.
 release_group = GroupA
@@ -70,6 +73,7 @@ release_group = GroupB
 ;api_key = <source API key>
 ;rss_key = <source RSS key>
 ;type = F3NIX
+;grab_nfo_from_torrent_file = false
 ;release_group = GroupC
 
 [to_tracker]

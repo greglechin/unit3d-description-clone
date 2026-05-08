@@ -2,13 +2,14 @@ namespace Unit3dDescriptionClone.Config;
 
 using System.Text.RegularExpressions;
 
-internal enum TrackerType { UNIT3D, F3NIX }
+internal enum TrackerType { UNIT3D, F3NIX, TORZNAB }
 
 internal sealed record FromTrackerConfig(
     TrackerType TrackerType,
     string Url,
     string ApiKey,
     string RssKey,
+    bool GrabNfoFromTorrentFile,
     bool SupportsFileNameSearch,
     IReadOnlyList<string> ReleaseGroups);
 
@@ -47,12 +48,14 @@ internal sealed record AppConfig(
 
         List<FromTrackerConfig> fromTrackers = cfg.TryGetValue("from_tracker", out var fromSections)
             ? [.. fromSections.Select(from => new FromTrackerConfig(
-                TrackerType: from.TryGetValue("type", out var typeStr) && typeStr.Equals("F3NIX", StringComparison.OrdinalIgnoreCase)
-                    ? TrackerType.F3NIX
+                TrackerType: from.TryGetValue("type", out var typeStr)
+                    ? ParseTrackerType(typeStr)
                     : TrackerType.UNIT3D,
                 Url: from["url"],
                 ApiKey: from["api_key"],
                 RssKey: from.GetValueOrDefault("rss_key", ""),
+                GrabNfoFromTorrentFile: from.TryGetValue("grab_nfo_from_torrent_file", out var gnftf)
+                    && gnftf.Equals("true", StringComparison.OrdinalIgnoreCase),
                 SupportsFileNameSearch: !from.TryGetValue("supports_file_name_search", out var sfns)
                     || sfns.Equals("true", StringComparison.OrdinalIgnoreCase),
                 ReleaseGroups: from.TryGetValue("release_group", out var rg)
@@ -79,4 +82,11 @@ internal sealed record AppConfig(
             StripLinePatterns: stripLinePatterns,
             DescriptionAppend: descriptionAppend);
     }
+
+    private static TrackerType ParseTrackerType(string value) =>
+        value.Equals("F3NIX", StringComparison.OrdinalIgnoreCase)
+            ? TrackerType.F3NIX
+            : value.Equals("TORZNAB", StringComparison.OrdinalIgnoreCase)
+                ? TrackerType.TORZNAB
+                : TrackerType.UNIT3D;
 }
