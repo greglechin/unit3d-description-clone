@@ -277,6 +277,7 @@ internal sealed class DescriptionCloner(
         Console.WriteLine($"Found {images.Count} image(s) to rehost...");
         foreach (var (imgUrl, hrefUrl) in images)
         {
+            if (string.IsNullOrEmpty(imgUrl)) continue;
             if (config.KnownImages.TryGetValue(imgUrl, out var knownUrl))
             {
                 Console.WriteLine($"  Skipping (known): {imgUrl}\n    -> {knownUrl}");
