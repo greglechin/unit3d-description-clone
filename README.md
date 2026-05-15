@@ -13,11 +13,9 @@ remain accessible on the target tracker.
 3. It locates a matching torrent on the selected source tracker using one of two strategies
    (see [Source tracker lookup](#source-tracker-lookup) below).
 4. If the target torrent name already contains `-TRUMPABLE`, the torrent is skipped.
-5. The source torrent file is downloaded and parsed. The source and target torrents
-   must have the same number of `.mkv` files, and each target `.mkv` must exist in
-   the source torrent with the same byte size. If counts differ, or any target `.mkv`
-   is missing or size-mismatched, only the target torrent name is changed to
-   `{OriginalName}-TRUMPABLE`; the description is left unchanged.
+5. The source torrent file is downloaded and parsed. If the source and target files
+   trip the trumpable checks, only the target torrent name is changed and the
+   description is left unchanged (see [Trumpable logic](#trumpable-logic) below).
 6. The description and MediaInfo are copied from the source torrent.
 7. Any lines in the description matching a configured `[strip_lines]` pattern are removed.
 8. Several BBCode transformations are applied for compatibility with the target tracker:
@@ -39,6 +37,20 @@ remain accessible on the target tracker.
     torrent edit page, fills in the new description, and submits the form. If the source
     torrent provided MediaInfo and the target form's MediaInfo field is empty, it is also
     populated.
+
+## Trumpable logic
+
+The tool marks a target torrent as trumpable instead of cloning the description when:
+
+- The source and target torrents have different numbers of `.mkv` files.
+- A target `.mkv` cannot be matched to a source `.mkv` by full path or unique filename.
+- Any matched `.mkv` has a different byte size.
+- The target torrent has more than one `.mkv` and any target `.mkv` is more than one
+  folder deep.
+
+Those cases rename the torrent to `{OriginalName}-TRUMPABLE`. If the source tracker is
+selected but no matching source torrent is found, the torrent is renamed to
+`{OriginalName}-TRUMPABLE-TOREVIEW` instead.
 
 ## Configuration
 

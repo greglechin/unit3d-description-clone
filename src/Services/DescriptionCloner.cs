@@ -57,6 +57,16 @@ internal sealed class DescriptionCloner(
         Console.WriteLine($"Torrent name: {targetTorrent.Attributes.Name}");
         Console.WriteLine($"Lookup file: {lookupFileName}");
 
+        async Task MarkTrumpableAsync(string? appendTag = null)
+        {
+            await web.EnsureLoggedInAsync();
+            await SubmitEditAsync(
+                torrentId,
+                targetTorrent.Attributes.Description,
+                targetTorrent.Attributes.MediaInfo,
+                GetTrumpableName(targetTorrent.Attributes.Name) + (appendTag ?? ""));
+        }
+
         if (IsTrumpableName(targetTorrent.Attributes.Name))
         {
             Console.WriteLine("Torrent already marked -TRUMPABLE, skipping.");
@@ -96,19 +106,15 @@ internal sealed class DescriptionCloner(
         }
         if (sourceResult is null)
         {
-            Console.WriteLine("No matching torrent found on source tracker, aborting.");
+            Console.WriteLine("No matching torrent found on source tracker, marking trumpable for review.");
+            await MarkTrumpableAsync("-TOREVIEW");
             return;
         }
 
         var isTrumpable = IsTrumpable(targetTorrent.Attributes.Files, sourceResult.Files);
         if (isTrumpable)
         {
-            await web.EnsureLoggedInAsync();
-            await SubmitEditAsync(
-                torrentId,
-                targetTorrent.Attributes.Description,
-                targetTorrent.Attributes.MediaInfo,
-                GetTrumpableName(targetTorrent.Attributes.Name));
+            await MarkTrumpableAsync();
             return;
         }
 
@@ -167,10 +173,18 @@ internal sealed class DescriptionCloner(
 
     private static bool IsTrumpable(IReadOnlyList<TorrentFile> targetFiles, IReadOnlyList<TorrentFile> sourceFiles)
     {
-        Console.WriteLine($"Validating {targetFiles.Count} target file(s) against source torrent...");
-        if (sourceFiles.Count < targetFiles.Count)
+        targetFiles = [.. targetFiles.Where(file => file.Name.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))];
+        sourceFiles = [.. sourceFiles.Where(file => file.Name.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))];
+        Console.WriteLine($"Validating {targetFiles.Count} target MKV file(s) against source torrent...");
+        if (sourceFiles.Count != targetFiles.Count)
         {
             Console.WriteLine($"  Source file count mismatch: target={targetFiles.Count} source={sourceFiles.Count}");
+            return true;
+        }
+
+        if (targetFiles.Count > 1 && targetFiles.Any(file => NormalizeTorrentPath(file.Name).Count(c => c == '/') > 1))
+        {
+            Console.WriteLine("  Target MKV files are more than 1 folder deep.");
             return true;
         }
 
