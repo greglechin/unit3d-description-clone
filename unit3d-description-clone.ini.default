@@ -53,9 +53,9 @@ api_key =
 ; Useful for images on private sites that require authentication.
 ; Repeat [fetch_cookies] for each additional host. Repeat the cookie key for multiple cookies.
 ;[fetch_cookies]
-;url = https://sometracker.com
+;url = https://somewebsite.com
 ;cookie = session_id=abc123
-;cookie = tracker_uid=456
+;cookie = uid=456
 
 ; Map source image URLs to pre-rehosted URLs
 ; Each line: <source_url> = <rehosted_url>
