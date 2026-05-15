@@ -31,8 +31,13 @@ password =
 totp_secret = 
 
 [image_host]
+; Image host backend. Options:
+;   custom     (default) — self-hosted or compatible API; requires url and api_key
+;   imgbb      — imgbb.com; requires api_key only; url defaults to i.ibb.co and may be omitted
+;   ptscreens  — ptscreens.com; requires api_key only; url defaults to ptscreens.com and may be omitted
+; type = custom
 url = https://i.tracker.org
-api_key = 
+api_key =
 ; Optional: URL to substitute when an image cannot be fetched after all retries.
 ; If omitted, the clone is aborted when an image fails to download.
 ; placeholder_image = https://i.tracker.org/placeholder.png
@@ -43,6 +48,14 @@ api_key =
 ;[strip_lines]
 ;pattern = Created by L4G's Upload Assistant
 ;pattern = Uploaded with.*\bTool\b
+
+; Optional: cookies to send when fetching images from specific hosts.
+; Useful for images on private sites that require authentication.
+; Repeat [fetch_cookies] for each additional host. Repeat the cookie key for multiple cookies.
+;[fetch_cookies]
+;url = https://sometracker.com
+;cookie = session_id=abc123
+;cookie = tracker_uid=456
 
 ; Map source image URLs to pre-rehosted URLs
 ; Each line: <source_url> = <rehosted_url>

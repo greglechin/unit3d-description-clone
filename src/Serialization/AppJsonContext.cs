@@ -9,6 +9,8 @@ namespace Unit3dDescriptionClone.Serialization;
 [JsonSerializable(typeof(TorrentsResponse))]
 [JsonSerializable(typeof(TorrentsLinks))]
 [JsonSerializable(typeof(UploadResponse))]
+[JsonSerializable(typeof(ImgbbUploadResponse))]
+[JsonSerializable(typeof(PtscreensUploadResponse))]
 [JsonSerializable(typeof(F3nixSearchResponse))]
 [JsonSerializable(typeof(F3nixDetailsResponse))]
 internal partial class AppJsonContext : JsonSerializerContext { }

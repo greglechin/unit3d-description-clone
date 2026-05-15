@@ -27,7 +27,15 @@ var unit3dApi = new Unit3dApiClient(autoRedirectClient, config);
 var f3nixApi = new F3nixApiClient(autoRedirectClient);
 var torznabApi = new TorznabApiClient(autoRedirectClient);
 var web = new Unit3dWebClient(noRedirectClient, autoRedirectClient, cookies, config);
-var imageRehoster = new ImageRehoster(autoRedirectClient, config);
+IImageUploadBackend imageUploadBackend = config.ImageHostType switch
+{
+    ImageHostType.Imgbb => new ImgbbImageUploadBackend(autoRedirectClient, config.ImageHostApiKey),
+    ImageHostType.Ptscreens => new PtscreensImageUploadBackend(autoRedirectClient, config.ImageHostApiKey),
+    _ => new CustomImageUploadBackend(autoRedirectClient, config.ImageHostUrl, config.ImageHostApiKey)
+};
+if (string.IsNullOrEmpty(config.ImageHostUrl))
+    config = config with { ImageHostUrl = imageUploadBackend.DefaultHostDomain };
+var imageRehoster = new ImageRehoster(autoRedirectClient, imageUploadBackend, config);
 var cloner = new DescriptionCloner(unit3dApi, f3nixApi, torznabApi, web, imageRehoster, config);
 
 if (positional[0] == "backfill")
