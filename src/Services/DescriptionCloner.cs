@@ -182,9 +182,9 @@ internal sealed class DescriptionCloner(
             return true;
         }
 
-        if (targetFiles.Count > 1 && targetFiles.Any(file => NormalizeTorrentPath(file.Name).Count(c => c == '/') > 1))
+        if (targetFiles.Any(file => NormalizeTorrentPath(file.Name).Count(c => c == '/') > 1))
         {
-            Console.WriteLine("  Target MKV files are more than 1 folder deep.");
+            Console.WriteLine("  Target MKV file(s) are more than 1 folder deep.");
             return true;
         }
 
