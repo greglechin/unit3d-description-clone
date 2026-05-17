@@ -111,7 +111,7 @@ internal sealed class DescriptionCloner(
             return;
         }
 
-        var isTrumpable = IsTrumpable(targetTorrent.Attributes.Files, sourceResult.Files);
+        var isTrumpable = IsTrumpable(targetTorrent.Attributes, sourceResult.Files);
         if (isTrumpable)
         {
             await MarkTrumpableAsync();
@@ -171,8 +171,9 @@ internal sealed class DescriptionCloner(
         await SubmitEditAsync(torrentId, description.ToString(), mediaInfo, null);
     }
 
-    private static bool IsTrumpable(IReadOnlyList<TorrentFile> targetFiles, IReadOnlyList<TorrentFile> sourceFiles)
+    private static bool IsTrumpable(TorrentAttributes targetTorrent, IReadOnlyList<TorrentFile> sourceFiles)
     {
+        var targetFiles = targetTorrent.Files;
         targetFiles = [.. targetFiles.Where(file => file.Name.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))];
         sourceFiles = [.. sourceFiles.Where(file => file.Name.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))];
         Console.WriteLine($"Validating {targetFiles.Count} target MKV file(s) against source torrent...");
@@ -182,7 +183,7 @@ internal sealed class DescriptionCloner(
             return true;
         }
 
-        if (targetFiles.Any(file => NormalizeTorrentPath(file.Name).Count(c => c == '/') > 1))
+        if (targetFiles.FirstOrDefault(file => NormalizeTorrentPath(GetTargetTorrentPath(targetTorrent.Folder, file.Name)).Count(c => c == '/') > 1) is not null)
         {
             Console.WriteLine("  Target MKV file(s) are more than 1 folder deep.");
             return true;
@@ -223,6 +224,18 @@ internal sealed class DescriptionCloner(
     }
 
     private static string NormalizeTorrentPath(string path) => path.Replace('\\', '/').TrimStart('/');
+
+    private static string GetTargetTorrentPath(string? rootFolder, string fileName)
+    {
+        var normalizedFileName = NormalizeTorrentPath(fileName);
+        if (string.IsNullOrWhiteSpace(rootFolder))
+            return normalizedFileName;
+
+        var normalizedRootFolder = NormalizeTorrentPath(rootFolder).TrimEnd('/');
+        return normalizedFileName.StartsWith($"{normalizedRootFolder}/", StringComparison.OrdinalIgnoreCase)
+            ? normalizedFileName
+            : $"{normalizedRootFolder}/{normalizedFileName}";
+    }
 
     private static string GetTorrentFileName(string path)
     {

@@ -45,8 +45,7 @@ The tool marks a target torrent as trumpable instead of cloning the description 
 - The source and target torrents have different numbers of `.mkv` files.
 - A target `.mkv` cannot be matched to a source `.mkv` by full path or unique filename.
 - Any matched `.mkv` has a different byte size.
-- The target torrent has more than one `.mkv` and any target `.mkv` is more than one
-  folder deep.
+- Any target `.mkv` is more than one folder deep.
 
 Those cases rename the torrent to `{OriginalName}-TRUMPABLE`. If the source tracker is
 selected but no matching source torrent is found, the torrent is renamed to

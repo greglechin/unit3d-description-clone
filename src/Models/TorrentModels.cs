@@ -24,6 +24,8 @@ internal sealed class TorrentAttributes
     [JsonPropertyName("download_link")]
     public string? DownloadLink { get; set; }
 
+    public string? Folder { get; set; }
+
     public List<TorrentFile> Files { get; set; } = [];
 }
 
