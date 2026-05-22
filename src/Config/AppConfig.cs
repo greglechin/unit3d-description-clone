@@ -29,7 +29,7 @@ internal sealed record AppConfig(
 {
     public FromTrackerConfig? GetFromTrackerForTorrent(string torrentName) =>
         FromTrackers.FirstOrDefault(ft =>
-            ft.ReleaseGroups.Any(rg => torrentName.Contains(rg, StringComparison.OrdinalIgnoreCase)));
+            ft.ReleaseGroups.Any(rg => torrentName.EndsWith(rg, StringComparison.OrdinalIgnoreCase)));
 
     public static AppConfig Load(string path)
     {
