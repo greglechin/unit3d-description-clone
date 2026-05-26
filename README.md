@@ -126,13 +126,13 @@ api_key = <Image host API key>
 Clone a single torrent description by its ID on the target tracker:
 
 ```
-unit3d-description-clone [--no-rehost] [--no-append] <torrent-id>
+unit3d-description-clone [--no-rehost] [--no-append] [--allow-rerun] <torrent-id>
 ```
 
 Backfill all torrents on the target tracker whose name matches a release group, uploaded by a specific user:
 
 ```
-unit3d-description-clone [--no-rehost] [--no-append] backfill "<release group name>" "<uploader username>"
+unit3d-description-clone [--no-rehost] [--no-append] [--allow-rerun] backfill "<release group name>" "<uploader username>"
 ```
 
 ### Flags
@@ -141,6 +141,7 @@ unit3d-description-clone [--no-rehost] [--no-append] backfill "<release group na
 |------|-------------|
 | `--no-rehost` | Skip image rehosting. Images in the description are left pointing at their original URLs. |
 | `--no-append` | Skip appending the optional `[description_append]` config section. |
+| `--allow-rerun` | Reprocess torrents whose target description already contains `[spoiler=original info]`. |
 
 In backfill mode the tool filters the target tracker by both torrent name and uploader, paginates through all matching results and processes each
 torrent. A JSON file is written to `cache/<id>.json` once a torrent is processed so

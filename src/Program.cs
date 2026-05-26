@@ -8,12 +8,13 @@ var flags = args.Where(a => a.StartsWith('-')).ToHashSet(StringComparer.OrdinalI
 var positional = args.Where(a => !a.StartsWith('-')).ToArray();
 var skipRehosting = flags.Contains("--no-rehost");
 var skipAppend = flags.Contains("--no-append");
+var allowRerun = flags.Contains("--allow-rerun");
 
 if (positional.Length == 0 || (positional[0] == "backfill" && positional.Length < 3))
 {
     Console.Error.WriteLine("Usage:");
-    Console.Error.WriteLine("  unit3d-description-clone [--no-rehost] [--no-append] <torrent-id>");
-    Console.Error.WriteLine("  unit3d-description-clone [--no-rehost] [--no-append] backfill <release-group> <uploader>");
+    Console.Error.WriteLine("  unit3d-description-clone [--no-rehost] [--no-append] [--allow-rerun] <torrent-id>");
+    Console.Error.WriteLine("  unit3d-description-clone [--no-rehost] [--no-append] [--allow-rerun] backfill <release-group> <uploader>");
     return 1;
 }
 
@@ -31,8 +32,8 @@ var imageRehoster = new ImageRehoster(autoRedirectClient, config);
 var cloner = new DescriptionCloner(unit3dApi, f3nixApi, torznabApi, web, imageRehoster, config);
 
 if (positional[0] == "backfill")
-    await cloner.BackfillAsync(positional[1], positional[2], skipRehosting, skipAppend);
+    await cloner.BackfillAsync(positional[1], positional[2], skipRehosting, skipAppend, allowRerun);
 else
-    await cloner.CloneAsync(positional[0], skipRehosting, skipAppend);
+    await cloner.CloneAsync(positional[0], skipRehosting, skipAppend, allowRerun);
 
 return 0;

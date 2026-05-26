@@ -17,8 +17,9 @@ internal sealed class DescriptionCloner(
     AppConfig config)
 {
     private const string CacheDir = "cache";
+    private const string OriginalInfoSpoilerTag = "[spoiler=original info]";
 
-    public async Task BackfillAsync(string releaseGroup, string uploader, bool skipRehosting = false, bool skipAppend = false)
+    public async Task BackfillAsync(string releaseGroup, string uploader, bool skipRehosting = false, bool skipAppend = false, bool allowRerun = false)
     {
         Console.WriteLine($"Backfilling description for release group: {releaseGroup}, uploader: {uploader}");
         string? nextUrl = $"{config.ToTrackerUrl}/api/torrents/filter" +
@@ -36,7 +37,7 @@ internal sealed class DescriptionCloner(
                     continue;
                 }
 
-                await CloneAsync(torrent.Id, skipRehosting, skipAppend);
+                await CloneAsync(torrent.Id, skipRehosting, skipAppend, allowRerun);
                 File.WriteAllText(cacheFile,
                     JsonSerializer.Serialize(torrent, AppJsonContext.Default.TorrentInfo));
             }
@@ -46,12 +47,18 @@ internal sealed class DescriptionCloner(
         }
     }
 
-    public async Task CloneAsync(string torrentId, bool skipRehosting = false, bool skipAppend = false)
+    public async Task CloneAsync(string torrentId, bool skipRehosting = false, bool skipAppend = false, bool allowRerun = false)
     {
         Console.WriteLine($"Cloning description for torrent ID {torrentId}");
 
         Console.WriteLine($"Fetching torrent info from target tracker (ID {torrentId})...");
         var targetTorrent = await unit3dApi.GetTorrentAsync(torrentId);
+        if (!allowRerun && targetTorrent!.Attributes.Description.Contains(OriginalInfoSpoilerTag, StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine("Target description already contains original info spoiler, skipping. Use --allow-rerun to override.");
+            return;
+        }
+
         var lookupFile = targetTorrent!.Attributes.Files.FirstOrDefault()!;
         var lookupFileName = Path.GetFileName(lookupFile.Name);
         Console.WriteLine($"Torrent name: {targetTorrent.Attributes.Name}");
@@ -133,12 +140,11 @@ internal sealed class DescriptionCloner(
 
         description = ReplaceAlignTags(description);
 
-        var wrappedSpoilerTag = "[spoiler=original info]";
         string? originalDescriptionSpoiler = null;
-        if (oldTargetDescription.Contains(wrappedSpoilerTag, StringComparison.OrdinalIgnoreCase))
+        if (oldTargetDescription.Contains(OriginalInfoSpoilerTag, StringComparison.OrdinalIgnoreCase))
         {
             var lastEndTagIndex = oldTargetDescription.LastIndexOf("[/spoiler]", StringComparison.OrdinalIgnoreCase);
-            var startTagIndex = oldTargetDescription.LastIndexOf(wrappedSpoilerTag, lastEndTagIndex, StringComparison.OrdinalIgnoreCase);
+            var startTagIndex = oldTargetDescription.LastIndexOf(OriginalInfoSpoilerTag, lastEndTagIndex, StringComparison.OrdinalIgnoreCase);
             if (startTagIndex >= 0 && lastEndTagIndex > startTagIndex)
             {
                 var removeLength = lastEndTagIndex + "[/spoiler]".Length - startTagIndex;
@@ -147,7 +153,7 @@ internal sealed class DescriptionCloner(
             }
         }
         else if (!string.IsNullOrWhiteSpace(oldTargetDescription))
-            originalDescriptionSpoiler = $"{wrappedSpoilerTag}{oldTargetDescription}[/spoiler]";
+            originalDescriptionSpoiler = $"{OriginalInfoSpoilerTag}{oldTargetDescription}[/spoiler]";
 
 
         description.Insert(0, "[code]");
