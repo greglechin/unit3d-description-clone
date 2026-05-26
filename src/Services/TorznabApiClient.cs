@@ -88,6 +88,7 @@ internal sealed class TorznabApiClient(HttpClient client) : ISourceTrackerClient
             item.Id,
             cleanDescription,
             mediaInfo,
+            TorrentFileParser.GetFolderName(torrentFile),
             TorrentFileParser.GetFiles(torrentFile));
     }
 

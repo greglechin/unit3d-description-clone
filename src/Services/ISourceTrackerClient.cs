@@ -9,4 +9,4 @@ internal interface ISourceTrackerClient
     Task<SourceTorrentResult?> FindSourceTorrentByTmdbIdAsync(int tmdbId, string fileName, FromTrackerConfig fromTracker);
 }
 
-internal sealed record SourceTorrentResult(string Id, string Description, string? MediaInfo, IReadOnlyList<TorrentFile> Files);
+internal sealed record SourceTorrentResult(string Id, string Description, string? MediaInfo, string? Folder, IReadOnlyList<TorrentFile> Files);

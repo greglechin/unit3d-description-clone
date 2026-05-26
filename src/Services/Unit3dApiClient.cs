@@ -87,7 +87,7 @@ internal sealed class Unit3dApiClient(HttpClient client, AppConfig config) : ISo
         var t = await FindSourceTorrentAsync(fileName, fromTracker);
         return t is null
             ? null
-            : new SourceTorrentResult(t.Id, t.Attributes.Description, t.Attributes.MediaInfo, await GetSourceFilesAsync(t.Id, fromTracker));
+            : new SourceTorrentResult(t.Id, t.Attributes.Description, t.Attributes.MediaInfo, t.Attributes.Folder, await GetSourceFilesAsync(t.Id, fromTracker));
     }
 
     async Task<SourceTorrentResult?> ISourceTrackerClient.FindSourceTorrentByTmdbIdAsync(int tmdbId, string fileName, FromTrackerConfig fromTracker)
@@ -95,7 +95,7 @@ internal sealed class Unit3dApiClient(HttpClient client, AppConfig config) : ISo
         var t = await FindSourceTorrentByTmdbIdAsync(tmdbId, fileName, fromTracker);
         return t is null
             ? null
-            : new SourceTorrentResult(t.Id, t.Attributes.Description, t.Attributes.MediaInfo, await GetSourceFilesAsync(t.Id, fromTracker));
+            : new SourceTorrentResult(t.Id, t.Attributes.Description, t.Attributes.MediaInfo, t.Attributes.Folder, await GetSourceFilesAsync(t.Id, fromTracker));
     }
 
     private async Task<IReadOnlyList<TorrentFile>> GetSourceFilesAsync(string torrentId, FromTrackerConfig fromTracker)

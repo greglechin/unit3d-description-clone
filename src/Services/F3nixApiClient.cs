@@ -68,6 +68,7 @@ internal sealed class F3nixApiClient(HttpClient client) : ISourceTrackerClient
             result.Result.Id.ToString(),
             result.Result.Description,
             result.Result.Mediainfo,
+            string.IsNullOrWhiteSpace(result.Result.FolderName) ? searchItem.FolderName : result.Result.FolderName,
             await GetSourceFilesAsync(fromTracker, result.Result.Id, result.Result.DownloadUrl ?? searchItem.DownloadUrl));
     }
 

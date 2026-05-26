@@ -11,7 +11,8 @@
             "preLaunchTask": "dotnet: build",
             "program": "${workspaceFolder}/src/bin/Debug/net10.0/unit3d-description-clone.dll",
             "args": [
-                "872760"
+                "192523",
+                "--allow-rerun"
             ],
             "cwd": "${workspaceFolder}",
             "stopAtEntry": false,

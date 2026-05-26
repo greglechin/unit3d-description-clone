@@ -104,7 +104,7 @@ internal sealed class DescriptionCloner(
             return;
         }
 
-        var isTrumpable = IsTrumpable(targetTorrent.Attributes, sourceResult.Files);
+        var isTrumpable = IsTrumpable(targetTorrent.Attributes, sourceResult);
         if (isTrumpable)
         {
             await MarkTrumpableAsync();
@@ -163,9 +163,10 @@ internal sealed class DescriptionCloner(
         await SubmitEditAsync(torrentId, description.ToString(), mediaInfo, null);
     }
 
-    private static bool IsTrumpable(TorrentAttributes targetTorrent, IReadOnlyList<TorrentFile> sourceFiles)
+    private static bool IsTrumpable(TorrentAttributes targetTorrent, SourceTorrentResult sourceTorrent)
     {
         var targetFiles = targetTorrent.Files;
+        var sourceFiles = sourceTorrent.Files;
         targetFiles = [.. targetFiles.Where(file => file.Name.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))];
         sourceFiles = [.. sourceFiles.Where(file => file.Name.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))];
         Console.WriteLine($"Validating {targetFiles.Count} target MKV file(s) against source torrent...");
@@ -178,6 +179,12 @@ internal sealed class DescriptionCloner(
         if (targetFiles.FirstOrDefault(file => NormalizeTorrentPath(GetTargetTorrentPath(targetTorrent.Folder, file.Name)).Count(c => c == '/') > 1) is not null)
         {
             Console.WriteLine("  Target MKV file(s) are more than 1 folder deep.");
+            return true;
+        }
+
+        if (!FoldersMatch(targetTorrent.Folder, sourceTorrent.Folder))
+        {
+            Console.WriteLine($"  Source folder mismatch: target={targetTorrent.Folder} source={sourceTorrent.Folder}");
             return true;
         }
 
@@ -198,6 +205,15 @@ internal sealed class DescriptionCloner(
         }
 
         return false;
+    }
+
+    private static bool FoldersMatch(string? targetFolder, string? sourceFolder)
+    {
+        if (string.IsNullOrWhiteSpace(targetFolder) || string.IsNullOrWhiteSpace(sourceFolder))
+            return true;
+
+        return NormalizeTorrentPath(targetFolder).TrimEnd('/')
+            .Equals(NormalizeTorrentPath(sourceFolder).TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
     }
 
     private static TorrentFile? FindSourceFile(string targetName, IReadOnlyList<TorrentFile> sourceFiles)

@@ -35,6 +35,13 @@ internal static class TorrentFileParser
         ];
     }
 
+    public static string? GetFolderName(byte[] torrentFile)
+    {
+        var (torrent, _) = BEncodedDictionary.DecodeTorrent(torrentFile);
+        var info = GetDictionary(torrent, "info");
+        return info.ContainsKey((BEncodedString)"files") ? GetString(info, "name") : null;
+    }
+
     public static string? GetNfo(byte[] torrentFile)
     {
         var (torrent, _) = BEncodedDictionary.DecodeTorrent(torrentFile);
