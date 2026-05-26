@@ -144,12 +144,10 @@ unit3d-description-clone [--no-rehost] [--no-append] [--allow-rerun] backfill "<
 | `--allow-rerun` | Reprocess torrents whose target description already contains `[spoiler=original info]`. |
 
 In backfill mode the tool filters the target tracker by both torrent name and uploader, paginates through all matching results and processes each
-torrent. A JSON file is written to `cache/<id>.json` once a torrent is processed so
-that subsequent runs skip it.
+torrent.
 
 ## Cache directory
 
 The `cache/` directory is created automatically in the working directory. It stores:
 
 - `target-cookies.json` -- session cookies for the target tracker
-- `<torrent-id>.json` -- processed torrent records written during backfill runs
