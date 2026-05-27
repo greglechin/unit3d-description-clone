@@ -12,15 +12,20 @@ internal sealed class TorznabApiClient(HttpClient client) : ISourceTrackerClient
         return item is null ? null : await FetchDetailsAsync(fromTracker, item);
     }
 
-    public async Task<SourceTorrentResult?> FindSourceTorrentByTmdbIdAsync(int tmdbId, string fileName, FromTrackerConfig fromTracker)
+    public Task<SourceTorrentResult?> FindSourceTorrentByTmdbIdAsync(int tmdbId, string fileName, FromTrackerConfig fromTracker) =>
+        FindSourceTorrentByTmdbIdAsync(tmdbId, fileName, fromTracker, null);
+
+    public async Task<SourceTorrentResult?> FindSourceTorrentByTmdbIdAsync(int tmdbId, string fileName, FromTrackerConfig fromTracker, int? cat)
     {
         var expectedTitle = Path.GetFileNameWithoutExtension(fileName);
         foreach (var type in new[] { "movie", "tvsearch" })
         {
-            var items = await GetItemsAsync(fromTracker, type, new Dictionary<string, string>
+            var query = new Dictionary<string, string>
             {
                 ["tmdbid"] = tmdbId.ToString(),
-            });
+            };
+            var items = await GetItemsAsync(fromTracker, type, query);
+            if (cat is not null) items = [.. items.Where(item => item.Categories.Contains(cat.Value))];
             if (items.Count == 0)
                 continue;
 
@@ -125,7 +130,9 @@ internal sealed class TorznabApiClient(HttpClient client) : ISourceTrackerClient
             id,
             Text(item, "title"),
             Text(item, "description"),
-            ToAbsoluteUrl(enclosureUrl ?? link, fromTracker.Url));
+            ToAbsoluteUrl(enclosureUrl ?? link, fromTracker.Url),
+            [.. item.Elements().Where(e => e.Name.LocalName == "attr" && e.Attribute("name")?.Value == "category")
+                .Select(e => int.TryParse(e.Attribute("value")?.Value, out var category) ? category : 0)]);
     }
 
     private static string BuildApiUrl(FromTrackerConfig fromTracker, IReadOnlyDictionary<string, string> query) =>
@@ -227,5 +234,5 @@ internal sealed class TorznabApiClient(HttpClient client) : ISourceTrackerClient
             : $"{baseUrl.TrimEnd('/')}/{url.TrimStart('/')}";
     }
 
-    private sealed record TorznabItem(string Id, string Title, string Description, string? DownloadUrl);
+    private sealed record TorznabItem(string Id, string Title, string Description, string? DownloadUrl, IReadOnlyList<int> Categories);
 }

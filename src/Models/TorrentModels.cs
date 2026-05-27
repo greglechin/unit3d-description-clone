@@ -13,6 +13,7 @@ internal sealed class TorrentAttributes
 {
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
+    public string Category { get; set; } = "";
 
     [JsonPropertyName("tmdb_id")]
     [JsonConverter(typeof(NullableIntFromStringConverter))]

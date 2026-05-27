@@ -91,7 +91,9 @@ internal sealed class DescriptionCloner(
                 return;
             }
             Console.WriteLine($"Source tracker does not support file_name search — searching by TMDB ID {tmdbId}...");
-            sourceResult = await sourceClient.FindSourceTorrentByTmdbIdAsync(tmdbId.Value, lookupFileName, fromTracker);
+            sourceResult = fromTracker.TrackerType == TrackerType.TORZNAB
+                ? await torznabApi.FindSourceTorrentByTmdbIdAsync(tmdbId.Value, lookupFileName, fromTracker, targetTorrent.Attributes.Category.Equals("TV Show", StringComparison.OrdinalIgnoreCase) ? 5000 : 2000)
+                : await sourceClient.FindSourceTorrentByTmdbIdAsync(tmdbId.Value, lookupFileName, fromTracker);
         }
         else
         {
