@@ -42,7 +42,7 @@ internal sealed class Unit3dWebClient(
         string torrentId,
         string editPageUrl,
         IEnumerable<KeyValuePair<string, string>> fields)
-        => await PostFormAsync(
+        => await PostMultipartFormAsync(
             noRedirectClient,
             $"{config.ToTrackerUrl}/torrents/{torrentId}",
             editPageUrl,
@@ -144,6 +144,23 @@ internal sealed class Unit3dWebClient(
         var req = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = new FormUrlEncodedContent(fields),
+        };
+        req.Headers.Referrer = new Uri(referer);
+        req.Headers.Add("Origin", new Uri(url).GetLeftPart(UriPartial.Authority));
+        return await client.SendAsync(req);
+    }
+
+    private static async Task<HttpResponseMessage> PostMultipartFormAsync(
+        HttpClient client, string url, string referer,
+        IEnumerable<KeyValuePair<string, string>> fields)
+    {
+        using var content = new MultipartFormDataContent();
+        foreach (var (key, value) in fields)
+            content.Add(new StringContent(value), key);
+
+        var req = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = content,
         };
         req.Headers.Referrer = new Uri(referer);
         req.Headers.Add("Origin", new Uri(url).GetLeftPart(UriPartial.Authority));
