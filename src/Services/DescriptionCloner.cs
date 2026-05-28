@@ -85,15 +85,30 @@ internal sealed class DescriptionCloner(
         if (!fromTracker.SupportsFileNameSearch)
         {
             var tmdbId = targetTorrent.Attributes.TmdbId;
-            if (tmdbId is null or 0)
+            var imdbId = targetTorrent.Attributes.ImdbId;
+            if (fromTracker.TrackerType == TrackerType.TORZNAB)
             {
-                Console.WriteLine("No TMDB ID on target torrent, cannot search source tracker by TMDB ID, aborting.");
-                return;
+                if (imdbId is null or 0)
+                {
+                    Console.WriteLine("No IMDb ID on target torrent, cannot search Torznab source tracker by IMDb ID, aborting.");
+                    return;
+                }
+                Console.WriteLine($"Source tracker does not support file_name search — searching Torznab by IMDb ID {imdbId}...");
+                sourceResult = await torznabApi.FindSourceTorrentByImdbIdAsync(
+                    imdbId.Value,
+                    lookupFileName,
+                    fromTracker,
+                    targetTorrent.Attributes.Category.Equals("TV Show", StringComparison.OrdinalIgnoreCase) ? 5000 : 2000);
             }
-            Console.WriteLine($"Source tracker does not support file_name search — searching by TMDB ID {tmdbId}...");
-            sourceResult = fromTracker.TrackerType == TrackerType.TORZNAB
-                ? await torznabApi.FindSourceTorrentByTmdbIdAsync(tmdbId.Value, lookupFileName, fromTracker, targetTorrent.Attributes.Category.Equals("TV Show", StringComparison.OrdinalIgnoreCase) ? 5000 : 2000)
-                : await sourceClient.FindSourceTorrentByTmdbIdAsync(tmdbId.Value, lookupFileName, fromTracker);
+            else
+            {
+                if (tmdbId is null or 0)
+                {
+                    Console.WriteLine("No TMDB ID on target torrent, cannot search this source tracker by external ID, aborting.");
+                    return;
+                }
+                sourceResult = await sourceClient.FindSourceTorrentByTmdbIdAsync(tmdbId.Value, lookupFileName, fromTracker);
+            }
         }
         else
         {

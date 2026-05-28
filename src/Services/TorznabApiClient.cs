@@ -17,14 +17,32 @@ internal sealed class TorznabApiClient(HttpClient client) : ISourceTrackerClient
 
     public async Task<SourceTorrentResult?> FindSourceTorrentByTmdbIdAsync(int tmdbId, string fileName, FromTrackerConfig fromTracker, int? cat)
     {
+        return await FindSourceTorrentByExternalIdAsync("tmdbid", tmdbId.ToString(), fileName, fromTracker, cat);
+    }
+
+    public async Task<SourceTorrentResult?> FindSourceTorrentByImdbIdAsync(
+        int imdbId,
+        string fileName,
+        FromTrackerConfig fromTracker,
+        int? cat)
+    {
+        return await FindSourceTorrentByExternalIdAsync("imdbid", $"tt{imdbId:D7}", fileName, fromTracker, cat);
+    }
+
+    private async Task<SourceTorrentResult?> FindSourceTorrentByExternalIdAsync(
+        string parameterName,
+        string id,
+        string fileName,
+        FromTrackerConfig fromTracker,
+        int? cat)
+    {
         var expectedTitle = Path.GetFileNameWithoutExtension(fileName);
         foreach (var type in new[] { "movie", "tvsearch" })
         {
-            var query = new Dictionary<string, string>
+            var items = await GetItemsAsync(fromTracker, type, new Dictionary<string, string>
             {
-                ["tmdbid"] = tmdbId.ToString(),
-            };
-            var items = await GetItemsAsync(fromTracker, type, query);
+                [parameterName] = id,
+            });
             if (cat is not null) items = [.. items.Where(item => item.Categories.Contains(cat.Value))];
             if (items.Count == 0)
                 continue;

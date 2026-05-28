@@ -19,6 +19,10 @@ internal sealed class TorrentAttributes
     [JsonConverter(typeof(NullableIntFromStringConverter))]
     public int? TmdbId { get; set; }
 
+    [JsonPropertyName("imdb_id")]
+    [JsonConverter(typeof(NullableIntFromStringConverter))]
+    public int? ImdbId { get; set; }
+
     [JsonPropertyName("media_info")]
     public string? MediaInfo { get; set; }
 
