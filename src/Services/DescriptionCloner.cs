@@ -1,8 +1,10 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
 using Unit3dDescriptionClone.Config;
 using Unit3dDescriptionClone.Models;
+using Unit3dDescriptionClone.Serialization;
 
 namespace Unit3dDescriptionClone.Services;
 
@@ -14,6 +16,7 @@ internal sealed class DescriptionCloner(
     ImageRehoster imageRehoster,
     AppConfig config)
 {
+    private const string CacheDir = "cache";
     private const string OriginalInfoSpoilerTag = "[spoiler=original info]";
 
     public async Task BackfillAsync(string releaseGroup, string uploader, bool skipRehosting = false, bool skipAppend = false, bool allowRerun = false)
@@ -26,7 +29,18 @@ internal sealed class DescriptionCloner(
         {
             var page = await unit3dApi.GetTorrentsPageAsync(nextUrl);
             foreach (var torrent in page.Data)
+            {
+                var cacheFile = Path.Combine(CacheDir, $"{torrent.Id}.json");
+                if (File.Exists(cacheFile))
+                {
+                    Console.WriteLine($"  Skipping (cached): {torrent.Id} - {torrent.Attributes.Name}");
+                    continue;
+                }
+
                 await CloneAsync(torrent.Id, skipRehosting, skipAppend, allowRerun);
+                File.WriteAllText(cacheFile,
+                    JsonSerializer.Serialize(torrent, AppJsonContext.Default.TorrentInfo));
+            }
 
             nextUrl = page.Links?.Next;
             await Task.Delay(1000);
