@@ -485,5 +485,5 @@ cache
 unit3d-description-clone.ini
 description_append.txt
 apidocs
-
+publish-x64
 unit3d-description-clone.csproj.lscache

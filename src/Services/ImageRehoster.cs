@@ -1,12 +1,9 @@
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using Unit3dDescriptionClone.Config;
 using Unit3dDescriptionClone.Models;
-using Unit3dDescriptionClone.Serialization;
 
 namespace Unit3dDescriptionClone.Services;
 
-internal sealed class ImageRehoster(HttpClient client, AppConfig config)
+internal sealed class ImageRehoster(HttpClient client, IImageUploadBackend backend, AppConfig config)
 {
     private const int FetchRetries = 2;
 
@@ -20,7 +17,6 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
             if (!string.IsNullOrEmpty(config.ImageHostPlaceholder))
             {
                 Console.WriteLine($"    Using placeholder image: {config.ImageHostPlaceholder}");
-
                 return new RehostedImage()
                 {
                     Full = config.ImageHostPlaceholder,
@@ -48,28 +44,10 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
             uploadStream = rawStream;
         }
 
-        var uploadReq = new HttpRequestMessage(HttpMethod.Post, $"{config.ImageHostUrl}/upload");
-        uploadReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ImageHostApiKey);
-        var fileContent = new StreamContent(uploadStream);
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
-        uploadReq.Content = new MultipartFormDataContent
-        {
-            { fileContent, "files[]", fileName },
-            { new StringContent("description"), "source_type" }
-        };
-
-        var resp = await client.SendAsync(uploadReq);
-        resp.EnsureSuccessStatusCode();
-        var result = await resp.Content.ReadFromJsonAsync(AppJsonContext.Default.UploadResponse);
-        var newFullUrl = result!.Files[0].Url;
-        var newThumbnailUrl = result!.Files[0].Thumbnail_url;
-        Console.WriteLine($"    -> {newFullUrl}");
-        Console.WriteLine($"    -> {newThumbnailUrl}");
-        return new RehostedImage()
-        {
-            Full = newFullUrl,
-            Thumbnail = newThumbnailUrl
-        };
+        var rehosted = await backend.UploadAsync(uploadStream, fileName, contentType);
+        Console.WriteLine($"    -> {rehosted.Full}");
+        Console.WriteLine($"    -> {rehosted.Thumbnail}");
+        return rehosted;
     }
 
     public async Task<(bool IsImage, string ImageUrl)> GetImageFromHref(string imageUrl)
@@ -103,13 +81,26 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
         }
     }
 
+    private HttpRequestMessage BuildRequest(HttpMethod method, string url)
+    {
+        var request = new HttpRequestMessage(method, url);
+        var host = new Uri(url).Host;
+        var cookies = config.FetchCookies
+            .Where(fc => new Uri(fc.Url).Host.Equals(host, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(fc => fc.Cookies)
+            .ToList();
+        if (cookies.Count > 0)
+            request.Headers.TryAddWithoutValidation("Cookie", string.Join("; ", cookies));
+        return request;
+    }
+
     private async Task<HttpResponseMessage?> FetchWithRetryAsync(string imageUrl)
     {
         for (var attempt = 0; attempt <= FetchRetries; attempt++)
         {
             try
             {
-                var resp = await client.SendAsync(new HttpRequestMessage(HttpMethod.Get, imageUrl));
+                var resp = await client.SendAsync(BuildRequest(HttpMethod.Get, imageUrl));
                 resp.EnsureSuccessStatusCode();
                 return resp;
             }
@@ -133,7 +124,7 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
         {
             try
             {
-                var resp = await client.SendAsync(new HttpRequestMessage(HttpMethod.Head, imageUrl));
+                var resp = await client.SendAsync(BuildRequest(HttpMethod.Head, imageUrl));
                 resp.EnsureSuccessStatusCode();
 
                 var contentType = resp.Content.Headers.GetValues($"Content-Type").First();

@@ -4,6 +4,10 @@ using System.Text.RegularExpressions;
 
 internal enum TrackerType { UNIT3D, F3NIX, TORZNAB }
 
+internal enum ImageHostType { Custom, Imgbb, Ptscreens }
+
+internal sealed record FetchCookiesConfig(string Url, IReadOnlyList<string> Cookies);
+
 internal sealed record FromTrackerConfig(
     TrackerType TrackerType,
     string Url,
@@ -20,12 +24,14 @@ internal sealed record AppConfig(
     string ToTrackerUsername,
     string ToTrackerPassword,
     string ToTrackerTotpSecret,
+    ImageHostType ImageHostType,
     string ImageHostUrl,
     string ImageHostApiKey,
     string ImageHostPlaceholder,
     IReadOnlyDictionary<string, string> KnownImages,
     IReadOnlyList<Regex> StripLinePatterns,
-    string DescriptionAppend)
+    string DescriptionAppend,
+    IReadOnlyList<FetchCookiesConfig> FetchCookies)
 {
     public FromTrackerConfig? GetFromTrackerForTorrent(string torrentName) =>
         FromTrackers.FirstOrDefault(ft =>
@@ -68,6 +74,18 @@ internal sealed record AppConfig(
             ? daContent.TrimEnd()
             : "";
 
+        List<FetchCookiesConfig> fetchCookies = cfg.TryGetValue("fetch_cookies", out var fcSections)
+            ? [.. fcSections.Select(fc => new FetchCookiesConfig(
+                Url: fc["url"],
+                Cookies: fc.TryGetValue("cookie", out var cookieStr)
+                    ? cookieStr.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    : []))]
+            : [];
+
+        var imageHostType = img.TryGetValue("type", out var hostTypeStr)
+            ? ParseImageHostType(hostTypeStr)
+            : ImageHostType.Custom;
+
         return new AppConfig(
             FromTrackers: fromTrackers,
             ToTrackerUrl: to["url"],
@@ -75,12 +93,14 @@ internal sealed record AppConfig(
             ToTrackerUsername: to["username"],
             ToTrackerPassword: to["password"],
             ToTrackerTotpSecret: to.GetValueOrDefault("totp_secret", ""),
-            ImageHostUrl: img["url"],
+            ImageHostType: imageHostType,
+            ImageHostUrl: img.GetValueOrDefault("url", ""),
             ImageHostApiKey: img["api_key"],
             ImageHostPlaceholder: img.GetValueOrDefault("placeholder_image", ""),
             KnownImages: knownImages,
             StripLinePatterns: stripLinePatterns,
-            DescriptionAppend: descriptionAppend);
+            DescriptionAppend: descriptionAppend,
+            FetchCookies: fetchCookies);
     }
 
     private static TrackerType ParseTrackerType(string value) =>
@@ -89,4 +109,9 @@ internal sealed record AppConfig(
             : value.Equals("TORZNAB", StringComparison.OrdinalIgnoreCase)
                 ? TrackerType.TORZNAB
                 : TrackerType.UNIT3D;
+
+    private static ImageHostType ParseImageHostType(string value) =>
+        value.Equals("imgbb", StringComparison.OrdinalIgnoreCase) ? ImageHostType.Imgbb
+        : value.Equals("ptscreens", StringComparison.OrdinalIgnoreCase) ? ImageHostType.Ptscreens
+        : ImageHostType.Custom;
 }
