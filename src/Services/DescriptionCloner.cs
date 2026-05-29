@@ -59,7 +59,12 @@ internal sealed class DescriptionCloner(
             return;
         }
 
-        var lookupFile = targetTorrent!.Attributes.Files.FirstOrDefault()!;
+        var lookupFile = targetTorrent!.Attributes.Files.FirstOrDefault();
+        if (lookupFile == null)
+        {
+            Console.WriteLine("Target does not report any files for comparison, aborting.");
+            return;
+        }
         var lookupFileName = Path.GetFileName(lookupFile.Name);
         Console.WriteLine($"Torrent name: {targetTorrent.Attributes.Name}");
         Console.WriteLine($"Lookup file: {lookupFileName}");
