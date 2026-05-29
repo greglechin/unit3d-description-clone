@@ -111,9 +111,10 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
             {
                 var resp = await client.SendAsync(new HttpRequestMessage(HttpMethod.Get, imageUrl));
                 resp.EnsureSuccessStatusCode();
+                if (resp.Content == null) throw new Exception();
                 return resp;
             }
-            catch (TaskCanceledException) when (attempt < FetchRetries)
+            catch (Exception) when (attempt < FetchRetries)
             {
                 Console.WriteLine($"    Timeout fetching image, retrying ({attempt + 1}/{FetchRetries})...");
                 await Task.Delay(1000);

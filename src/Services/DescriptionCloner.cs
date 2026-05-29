@@ -367,7 +367,13 @@ internal sealed class DescriptionCloner(
             var fetchUrl = imgUrl;
             if (hrefUrl != null)
             {
-                var (hrefIsImage, hrefImageUrl) = await imageRehoster.GetImageFromHref(hrefUrl);
+                var hrefIsImage = false;
+                var hrefImageUrl = "";
+                try
+                {
+                    (hrefIsImage, hrefImageUrl) = await imageRehoster.GetImageFromHref(hrefUrl);
+                }
+                catch (Exception) { }
                 if (hrefIsImage)
                     fetchUrl = hrefImageUrl;
             }
