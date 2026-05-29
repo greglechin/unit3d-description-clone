@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -53,6 +54,11 @@ internal sealed class DescriptionCloner(
 
         Console.WriteLine($"Fetching torrent info from target tracker (ID {torrentId})...");
         var targetTorrent = await unit3dApi.GetTorrentAsync(torrentId);
+        if (targetTorrent == null)
+        {
+            Console.WriteLine("Target torrent not found on api, skipping.");
+            return;
+        }
         if (!allowRerun && targetTorrent!.Attributes.Description.Contains(OriginalInfoSpoilerTag, StringComparison.OrdinalIgnoreCase))
         {
             Console.WriteLine("Target description already contains original info spoiler, skipping. Use --allow-rerun to override.");

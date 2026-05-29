@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Unit3dDescriptionClone.Config;
 using Unit3dDescriptionClone.Models;
 using Unit3dDescriptionClone.Serialization;
+using System.Net;
 
 namespace Unit3dDescriptionClone.Services;
 
@@ -13,7 +14,17 @@ internal sealed class Unit3dApiClient(HttpClient client, AppConfig config) : ISo
         var req = new HttpRequestMessage(HttpMethod.Get, $"{config.ToTrackerUrl}/api/torrents/{torrentId}");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ToTrackerApiKey);
         var resp = await client.SendAsync(req);
-        resp.EnsureSuccessStatusCode();
+        try
+        {
+            resp.EnsureSuccessStatusCode();
+        }
+        catch (Exception)
+        {
+            if (resp.StatusCode == HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+        }
         return await resp.Content.ReadFromJsonAsync(AppJsonContext.Default.TorrentInfo);
     }
 
