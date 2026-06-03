@@ -38,17 +38,19 @@ internal sealed class DescriptionCloner(
                     continue;
                 }
 
-                await CloneAsync(torrent.Id, skipRehosting, skipAppend, allowRerun);
+                var alreadyCloned = await CloneAsync(torrent.Id, skipRehosting, skipAppend, allowRerun);
                 File.WriteAllText(cacheFile,
                     JsonSerializer.Serialize(torrent, AppJsonContext.Default.TorrentInfo));
+                if (alreadyCloned)
+                    await Task.Delay(2000);
             }
 
             nextUrl = page.Links?.Next;
-            await Task.Delay(1000);
+            await Task.Delay(5000);
         }
     }
 
-    public async Task CloneAsync(string torrentId, bool skipRehosting = false, bool skipAppend = false, bool allowRerun = false)
+    public async Task<bool> CloneAsync(string torrentId, bool skipRehosting = false, bool skipAppend = false, bool allowRerun = false)
     {
         Console.WriteLine($"Cloning description for torrent ID {torrentId}");
 
@@ -57,19 +59,19 @@ internal sealed class DescriptionCloner(
         if (targetTorrent == null)
         {
             Console.WriteLine("Target torrent not found on api, skipping.");
-            return;
+            return false;
         }
         if (!allowRerun && targetTorrent!.Attributes.Description.Contains(OriginalInfoSpoilerTag, StringComparison.OrdinalIgnoreCase))
         {
             Console.WriteLine("Target description already contains original info spoiler, skipping. Use --allow-rerun to override.");
-            return;
+            return true;
         }
 
         var lookupFile = targetTorrent!.Attributes.Files.FirstOrDefault();
         if (lookupFile == null)
         {
             Console.WriteLine("Target does not report any files for comparison, aborting.");
-            return;
+            return false;
         }
         var lookupFileName = Path.GetFileName(lookupFile.Name);
         Console.WriteLine($"Torrent name: {targetTorrent.Attributes.Name}");
@@ -88,14 +90,14 @@ internal sealed class DescriptionCloner(
         if (IsTrumpableName(targetTorrent.Attributes.Name))
         {
             Console.WriteLine("Torrent already marked -TRUMPABLE, skipping.");
-            return;
+            return false;
         }
 
         var fromTracker = config.GetFromTrackerForTorrent(targetTorrent.Attributes.Name);
         if (fromTracker is null)
         {
             Console.WriteLine("No matching [from_tracker] found for this torrent name, aborting.");
-            return;
+            return false;
         }
         Console.WriteLine($"Using source tracker: {fromTracker.Url}");
 
@@ -116,7 +118,7 @@ internal sealed class DescriptionCloner(
                 if (imdbId is null or 0)
                 {
                     Console.WriteLine("No IMDb ID on target torrent, cannot search Torznab source tracker by IMDb ID, aborting.");
-                    return;
+                    return false;
                 }
                 Console.WriteLine($"Source tracker does not support file_name search — searching Torznab by IMDb ID {imdbId}...");
                 sourceResult = await torznabApi.FindSourceTorrentByImdbIdAsync(
@@ -130,7 +132,7 @@ internal sealed class DescriptionCloner(
                 if (tmdbId is null or 0)
                 {
                     Console.WriteLine("No TMDB ID on target torrent, cannot search this source tracker by external ID, aborting.");
-                    return;
+                    return false;
                 }
                 sourceResult = await sourceClient.FindSourceTorrentByTmdbIdAsync(tmdbId.Value, lookupFileName, fromTracker);
             }
@@ -143,14 +145,14 @@ internal sealed class DescriptionCloner(
         {
             Console.WriteLine("No matching torrent found on source tracker, marking trumpable for review.");
             await MarkTrumpableAsync("-TOREVIEW");
-            return;
+            return false;
         }
 
         var isTrumpable = IsTrumpable(targetTorrent.Attributes, sourceResult);
         if (isTrumpable)
         {
             await MarkTrumpableAsync();
-            return;
+            return false;
         }
 
         var description = new StringBuilder(sourceResult.Description);
@@ -188,7 +190,7 @@ internal sealed class DescriptionCloner(
         description.Append("[/code]");
 
         if (!skipRehosting && !await RehostImagesAsync(description))
-            return;
+            return false;
 
         if (originalDescriptionSpoiler is not null)
             description.Append(originalDescriptionSpoiler);
@@ -203,6 +205,7 @@ internal sealed class DescriptionCloner(
 
         await web.EnsureLoggedInAsync();
         await SubmitEditAsync(torrentId, description.ToString(), mediaInfo, null);
+        return false;
     }
 
     private static bool IsTrumpable(TorrentAttributes targetTorrent, SourceTorrentResult sourceTorrent)
