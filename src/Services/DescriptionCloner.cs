@@ -210,6 +210,17 @@ internal sealed class DescriptionCloner(
 
     private static bool IsTrumpable(TorrentAttributes targetTorrent, SourceTorrentResult sourceTorrent)
     {
+        var sourceUniqueId = Regex.Match(sourceTorrent.MediaInfo ?? "", @"^\s*Unique\s*ID\s*:\s*(?<id>.+?)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        if (sourceUniqueId.Success)
+        {
+            var targetUniqueId = Regex.Match(targetTorrent.MediaInfo ?? "", @"^\s*Unique\s*ID\s*:\s*(?<id>.+?)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            if (!targetUniqueId.Success || !targetUniqueId.Groups["id"].Value.Trim().Equals(sourceUniqueId.Groups["id"].Value.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"  MediaInfo UniqueID mismatch: target={targetUniqueId.Groups["id"].Value.Trim()} source={sourceUniqueId.Groups["id"].Value.Trim()}");
+                return true;
+            }
+        }
+
         var targetFiles = targetTorrent.Files;
         var sourceFiles = sourceTorrent.Files;
         targetFiles = [.. targetFiles.Where(file => file.Name.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))];
