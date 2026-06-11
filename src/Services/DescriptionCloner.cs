@@ -210,17 +210,6 @@ internal sealed class DescriptionCloner(
 
     private static bool IsTrumpable(TorrentAttributes targetTorrent, SourceTorrentResult sourceTorrent)
     {
-        var sourceUniqueId = Regex.Match(sourceTorrent.MediaInfo ?? "", @"^\s*Unique\s*ID\s*:\s*(?<id>.+?)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
-        if (sourceUniqueId.Success)
-        {
-            var targetUniqueId = Regex.Match(targetTorrent.MediaInfo ?? "", @"^\s*Unique\s*ID\s*:\s*(?<id>.+?)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
-            if (!targetUniqueId.Success || !targetUniqueId.Groups["id"].Value.Trim().Equals(sourceUniqueId.Groups["id"].Value.Trim(), StringComparison.OrdinalIgnoreCase))
-            {
-                Console.WriteLine($"  MediaInfo UniqueID mismatch: target={targetUniqueId.Groups["id"].Value.Trim()} source={sourceUniqueId.Groups["id"].Value.Trim()}");
-                return true;
-            }
-        }
-
         var targetFiles = targetTorrent.Files;
         var sourceFiles = sourceTorrent.Files;
         targetFiles = [.. targetFiles.Where(file => file.Name.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))];
@@ -257,6 +246,24 @@ internal sealed class DescriptionCloner(
             {
                 Console.WriteLine($"  Source file size mismatch: {targetFile.Name} target={targetFile.Size} source={sourceFile.Size}");
                 return true;
+            }
+        }
+
+        var sourceUniqueId = Regex.Match(sourceTorrent.MediaInfo ?? "", @"^\s*Unique\s*ID\s*:\s*(?<id>.+?)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        if (sourceUniqueId.Success)
+        {
+            var sourceCompleteName = Regex.Match(sourceTorrent.MediaInfo ?? "", @"^\s*Complete\s*name\s*:\s*(?<name>.+?)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            var targetCompleteName = Regex.Match(targetTorrent.MediaInfo ?? "", @"^\s*Complete\s*name\s*:\s*(?<name>.+?)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            if (sourceCompleteName.Success && targetCompleteName.Success &&
+                GetTorrentFileName(NormalizeTorrentPath(targetCompleteName.Groups["name"].Value.Trim()))
+                    .Equals(GetTorrentFileName(NormalizeTorrentPath(sourceCompleteName.Groups["name"].Value.Trim())), StringComparison.OrdinalIgnoreCase))
+            {
+                var targetUniqueId = Regex.Match(targetTorrent.MediaInfo ?? "", @"^\s*Unique\s*ID\s*:\s*(?<id>.+?)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+                if (!targetUniqueId.Success || !targetUniqueId.Groups["id"].Value.Trim().Equals(sourceUniqueId.Groups["id"].Value.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine($"  MediaInfo UniqueID mismatch: target={targetUniqueId.Groups["id"].Value.Trim()} source={sourceUniqueId.Groups["id"].Value.Trim()}");
+                    return true;
+                }
             }
         }
 
