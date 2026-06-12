@@ -77,12 +77,22 @@ internal sealed class DescriptionCloner(
         Console.WriteLine($"Torrent name: {targetTorrent.Attributes.Name}");
         Console.WriteLine($"Lookup file: {lookupFileName}");
 
-        async Task MarkTrumpableAsync(string? appendTag = null)
+        async Task MarkTrumpableAsync(string reason, string? appendTag = null)
         {
+            var description = new StringBuilder()
+                .Append("[code]")
+                .AppendLine(reason)
+                .AppendLine("[/code]");
+            if (!string.IsNullOrWhiteSpace(targetTorrent.Attributes.Description))
+            {
+                description.AppendLine();
+                description.Append(targetTorrent.Attributes.Description);
+            }
+
             await web.EnsureLoggedInAsync();
             await SubmitEditAsync(
                 torrentId,
-                targetTorrent.Attributes.Description,
+                description.ToString(),
                 targetTorrent.Attributes.MediaInfo,
                 GetTrumpableName(targetTorrent.Attributes.Name) + (appendTag ?? ""));
         }
@@ -144,14 +154,14 @@ internal sealed class DescriptionCloner(
         if (sourceResult is null)
         {
             Console.WriteLine("No matching torrent found on source tracker, marking trumpable for review.");
-            await MarkTrumpableAsync("-TOREVIEW");
+            await MarkTrumpableAsync("No matching torrent found on source tracker.", "-TOREVIEW");
             return false;
         }
 
-        var isTrumpable = IsTrumpable(targetTorrent.Attributes, sourceResult);
+        var isTrumpable = IsTrumpable(targetTorrent.Attributes, sourceResult, out var trumpableReason);
         if (isTrumpable)
         {
-            await MarkTrumpableAsync();
+            await MarkTrumpableAsync(trumpableReason!);
             return false;
         }
 
@@ -208,8 +218,9 @@ internal sealed class DescriptionCloner(
         return false;
     }
 
-    private static bool IsTrumpable(TorrentAttributes targetTorrent, SourceTorrentResult sourceTorrent)
+    private static bool IsTrumpable(TorrentAttributes targetTorrent, SourceTorrentResult sourceTorrent, out string? reason)
     {
+        reason = null;
         var targetFiles = targetTorrent.Files;
         var sourceFiles = sourceTorrent.Files;
         targetFiles = [.. targetFiles.Where(file => file.Name.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))];
@@ -217,19 +228,22 @@ internal sealed class DescriptionCloner(
         Console.WriteLine($"Validating {targetFiles.Count} target MKV file(s) against source torrent...");
         if (sourceFiles.Count != targetFiles.Count)
         {
-            Console.WriteLine($"  Source file count mismatch: target={targetFiles.Count} source={sourceFiles.Count}");
+            reason = $"Source file count mismatch: target={targetFiles.Count} source={sourceFiles.Count}";
+            Console.WriteLine($"  {reason}");
             return true;
         }
 
         if (targetFiles.FirstOrDefault(file => NormalizeTorrentPath(GetTargetTorrentPath(targetTorrent.Folder, file.Name)).Count(c => c == '/') > 1) is not null)
         {
-            Console.WriteLine("  Target MKV file(s) are more than 1 folder deep.");
+            reason = "Target MKV file(s) are more than 1 folder deep.";
+            Console.WriteLine($"  {reason}");
             return true;
         }
 
         if (!FoldersMatch(targetTorrent.Folder, sourceTorrent.Folder))
         {
-            Console.WriteLine($"  Source folder mismatch: target={targetTorrent.Folder} source={sourceTorrent.Folder}");
+            reason = $"Source folder mismatch: target={targetTorrent.Folder} source={sourceTorrent.Folder}";
+            Console.WriteLine($"  {reason}");
             return true;
         }
 
@@ -238,13 +252,15 @@ internal sealed class DescriptionCloner(
             var sourceFile = FindSourceFile(targetFile.Name, sourceFiles);
             if (sourceFile is null)
             {
-                Console.WriteLine($"  Source file missing: {targetFile.Name}");
+                reason = $"Source file missing: {targetFile.Name}";
+                Console.WriteLine($"  {reason}");
                 return true;
             }
 
             if (sourceFile.Size != targetFile.Size)
             {
-                Console.WriteLine($"  Source file size mismatch: {targetFile.Name} target={targetFile.Size} source={sourceFile.Size}");
+                reason = $"Source file size mismatch: {targetFile.Name} target={targetFile.Size} source={sourceFile.Size}";
+                Console.WriteLine($"  {reason}");
                 return true;
             }
         }
@@ -261,7 +277,8 @@ internal sealed class DescriptionCloner(
                 var targetUniqueId = Regex.Match(targetTorrent.MediaInfo ?? "", @"^\s*Unique\s*ID\s*:\s*(?<id>.+?)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
                 if (!targetUniqueId.Success || !targetUniqueId.Groups["id"].Value.Trim().Equals(sourceUniqueId.Groups["id"].Value.Trim(), StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine($"  MediaInfo UniqueID mismatch: target={targetUniqueId.Groups["id"].Value.Trim()} source={sourceUniqueId.Groups["id"].Value.Trim()}");
+                    reason = $"MediaInfo UniqueID mismatch: target={targetUniqueId.Groups["id"].Value.Trim()} source={sourceUniqueId.Groups["id"].Value.Trim()}";
+                    Console.WriteLine($"  {reason}");
                     return true;
                 }
             }
