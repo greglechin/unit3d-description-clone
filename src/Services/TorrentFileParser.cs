@@ -69,5 +69,5 @@ internal static class TorrentFileParser
             : null;
 
     private static string NormalizeNfo(string value) =>
-        value.Trim().Replace("[/size][/color]", "\n[/size][/color]", StringComparison.Ordinal);
+        (value ?? "").Trim().Replace("[/size][/color]", "\n[/size][/color]", StringComparison.Ordinal);
 }
