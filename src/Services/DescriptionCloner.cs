@@ -103,58 +103,64 @@ internal sealed class DescriptionCloner(
             return false;
         }
 
-        var fromTracker = config.GetFromTrackerForTorrent(targetTorrent.Attributes.Name);
-        if (fromTracker is null)
+        var fromTrackers = config.GetFromTrackersForTorrent(targetTorrent.Attributes.Name);
+        if (fromTrackers.Count == 0)
         {
             Console.WriteLine("No matching [from_tracker] found for this torrent name, aborting.");
             return false;
         }
-        Console.WriteLine($"Using source tracker: {fromTracker.Url}");
-
-        Console.WriteLine("Searching for matching torrent on source tracker...");
-        ISourceTrackerClient sourceClient = fromTracker.TrackerType switch
+        SourceTorrentResult? sourceResult = null;
+        foreach (var fromTracker in fromTrackers)
         {
-            TrackerType.F3NIX => f3nixApi,
-            TrackerType.TORZNAB => torznabApi,
-            _ => unit3dApi,
-        };
-        SourceTorrentResult? sourceResult;
-        if (!fromTracker.SupportsFileNameSearch)
-        {
-            var tmdbId = targetTorrent.Attributes.TmdbId;
-            var imdbId = targetTorrent.Attributes.ImdbId;
-            if (fromTracker.TrackerType == TrackerType.TORZNAB)
+            Console.WriteLine($"Searching for matching torrent on source tracker: {fromTracker.Url}");
+            ISourceTrackerClient sourceClient = fromTracker.TrackerType switch
             {
-                if (imdbId is null or 0)
+                TrackerType.F3NIX => f3nixApi,
+                TrackerType.TORZNAB => torznabApi,
+                _ => unit3dApi,
+            };
+            if (!fromTracker.SupportsFileNameSearch)
+            {
+                var tmdbId = targetTorrent.Attributes.TmdbId;
+                var imdbId = targetTorrent.Attributes.ImdbId;
+                if (fromTracker.TrackerType == TrackerType.TORZNAB)
                 {
-                    Console.WriteLine("No IMDb ID on target torrent, cannot search Torznab source tracker by IMDb ID, aborting.");
-                    return false;
+                    if (imdbId is null or 0)
+                    {
+                        Console.WriteLine("No IMDb ID on target torrent, cannot search this Torznab source tracker.");
+                        continue;
+                    }
+                    Console.WriteLine($"Source tracker does not support file_name search — searching Torznab by IMDb ID {imdbId}...");
+                    sourceResult = await torznabApi.FindSourceTorrentByImdbIdAsync(
+                        imdbId.Value,
+                        lookupFileName,
+                        fromTracker,
+                        targetTorrent.Attributes.Category.Equals("TV Show", StringComparison.OrdinalIgnoreCase) ? 5000 : 2000);
                 }
-                Console.WriteLine($"Source tracker does not support file_name search — searching Torznab by IMDb ID {imdbId}...");
-                sourceResult = await torznabApi.FindSourceTorrentByImdbIdAsync(
-                    imdbId.Value,
-                    lookupFileName,
-                    fromTracker,
-                    targetTorrent.Attributes.Category.Equals("TV Show", StringComparison.OrdinalIgnoreCase) ? 5000 : 2000);
+                else
+                {
+                    if (tmdbId is null or 0)
+                    {
+                        Console.WriteLine("No TMDB ID on target torrent, cannot search this source tracker by external ID.");
+                        continue;
+                    }
+                    sourceResult = await sourceClient.FindSourceTorrentByTmdbIdAsync(tmdbId.Value, lookupFileName, fromTracker);
+                }
             }
             else
             {
-                if (tmdbId is null or 0)
-                {
-                    Console.WriteLine("No TMDB ID on target torrent, cannot search this source tracker by external ID, aborting.");
-                    return false;
-                }
-                sourceResult = await sourceClient.FindSourceTorrentByTmdbIdAsync(tmdbId.Value, lookupFileName, fromTracker);
+                sourceResult = await sourceClient.FindSourceTorrentAsync(lookupFileName, fromTracker);
             }
-        }
-        else
-        {
-            sourceResult = await sourceClient.FindSourceTorrentAsync(lookupFileName, fromTracker);
+
+            if (sourceResult is not null)
+                break;
+
+            Console.WriteLine("No matching torrent found on this source tracker.");
         }
         if (sourceResult is null)
         {
-            Console.WriteLine("No matching torrent found on source tracker, marking trumpable for review.");
-            await MarkTrumpableAsync("No matching torrent found on source tracker.", "-TOREVIEW");
+            Console.WriteLine("No matching torrent found on any source tracker, marking trumpable for review.");
+            await MarkTrumpableAsync("No matching torrent found on any source tracker.", "-TOREVIEW");
             return false;
         }
 

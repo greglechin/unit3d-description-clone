@@ -9,9 +9,9 @@ remain accessible on the target tracker.
 1. Given a torrent ID on the target tracker, the tool fetches that torrent's metadata
    from the target tracker API.
 2. The torrent name is matched against the `release_group` values of each `[from_tracker]`
-   section to select the appropriate source tracker.
-3. It locates a matching torrent on the selected source tracker using one of two strategies
-   (see [Source tracker lookup](#source-tracker-lookup) below).
+   section to select the applicable source trackers.
+3. It locates a matching torrent on each applicable source tracker in configuration order,
+   stopping at the first result (see [Source tracker lookup](#source-tracker-lookup) below).
 4. If the target torrent name already contains `-TRUMPABLE`, the torrent is skipped.
 5. The source torrent file is downloaded and parsed. If the source and target files
    trip the trumpable checks, only the target torrent name is changed and the
@@ -47,8 +47,8 @@ The tool marks a target torrent as trumpable instead of cloning the description 
 - Any matched `.mkv` has a different byte size.
 - Any target `.mkv` is more than one folder deep.
 
-Those cases rename the torrent to `{OriginalName}-TRUMPABLE`. If the source tracker is
-selected but no matching source torrent is found, the torrent is renamed to
+Those cases rename the torrent to `{OriginalName}-TRUMPABLE`. If source trackers are
+selected but no matching source torrent is found on any of them, the torrent is renamed to
 `{OriginalName}-TRUMPABLE-TOREVIEW` instead.
 
 ## Configuration
@@ -71,21 +71,22 @@ rss_key = <source RSS key>
 ; downloaded .torrent as the source description when available.
 grab_nfo_from_torrent_file = false
 ; One or more release group names (repeated keys). The torrent name is checked for a
-; case-insensitive substring match against each value. The first matching section is used.
+; case-insensitive suffix match against each value.
 release_group = GroupA
 release_group = GroupB
 ; Optional. Set to false if the tracker does not support the file_name filter.
 ; Torrents will then be matched by TMDB ID instead. Defaults to true when omitted.
 ; supports_file_name_search = false
 
-; Additional [from_tracker] sections can be added for other source trackers.
+; Additional [from_tracker] sections can be added for other source trackers. If multiple
+; sections match a release group, they are searched in configuration order until found.
 ;[from_tracker]
 ;url = https://source-tracker2.example
 ;api_key = <source API key>
 ;rss_key = <source RSS key>
 ;type = F3NIX
 ;grab_nfo_from_torrent_file = false
-;release_group = GroupC
+;release_group = GroupA
 
 [to_tracker]
 url = https://target-tracker.example

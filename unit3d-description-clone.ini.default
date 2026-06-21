@@ -15,13 +15,13 @@ release_group = GROUP-A
 release_group = GROUP-B
 
 ; Add more [from_tracker] sections to support additional source trackers.
-; The first section whose release_group matches the target torrent name will be used.
+; All sections whose release_group matches are searched in order until the torrent is found.
 ;[from_tracker]
 ;url = https://tracker2.cc
 ;api_key =
 ;rss_key =
 ;grab_nfo_from_torrent_file = false
-;release_group = GROUP-C
+;release_group = GROUP-A
 
 [to_tracker]
 url = https://tracker.org

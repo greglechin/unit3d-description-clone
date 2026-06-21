@@ -27,9 +27,9 @@ internal sealed record AppConfig(
     IReadOnlyList<Regex> StripLinePatterns,
     string DescriptionAppend)
 {
-    public FromTrackerConfig? GetFromTrackerForTorrent(string torrentName) =>
-        FromTrackers.FirstOrDefault(ft =>
-            ft.ReleaseGroups.Any(rg => torrentName.EndsWith(rg, StringComparison.OrdinalIgnoreCase)));
+    public IReadOnlyList<FromTrackerConfig> GetFromTrackersForTorrent(string torrentName) =>
+        [.. FromTrackers.Where(ft =>
+            ft.ReleaseGroups.Any(rg => torrentName.EndsWith(rg, StringComparison.OrdinalIgnoreCase)))];
 
     public static AppConfig Load(string path)
     {
