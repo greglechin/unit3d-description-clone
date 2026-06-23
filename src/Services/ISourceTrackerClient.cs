@@ -5,6 +5,7 @@ namespace Unit3dDescriptionClone.Services;
 
 internal interface ISourceTrackerClient
 {
+    Task<SourceTorrentResult?> FindSourceTorrentByIdAsync(string torrentId, FromTrackerConfig fromTracker);
     Task<SourceTorrentResult?> FindSourceTorrentAsync(string fileName, FromTrackerConfig fromTracker);
     Task<SourceTorrentResult?> FindSourceTorrentByTmdbIdAsync(int tmdbId, string fileName, FromTrackerConfig fromTracker);
 }

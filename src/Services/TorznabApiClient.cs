@@ -6,6 +6,20 @@ namespace Unit3dDescriptionClone.Services;
 
 internal sealed class TorznabApiClient(HttpClient client) : ISourceTrackerClient
 {
+    public async Task<SourceTorrentResult?> FindSourceTorrentByIdAsync(string torrentId, FromTrackerConfig fromTracker)
+    {
+        var item = (await GetItemsAsync(fromTracker, "details", new Dictionary<string, string>
+        {
+            ["id"] = torrentId,
+        })).FirstOrDefault();
+        if (item is null)
+            return null;
+
+        if (string.IsNullOrWhiteSpace(item.Id))
+            item = item with { Id = torrentId };
+        return await FetchDetailsAsync(fromTracker, item, fetchDetails: false);
+    }
+
     public async Task<SourceTorrentResult?> FindSourceTorrentAsync(string fileName, FromTrackerConfig fromTracker)
     {
         var item = await SearchByFileNameAsync(fromTracker, fileName);
@@ -78,10 +92,13 @@ internal sealed class TorznabApiClient(HttpClient client) : ISourceTrackerClient
         return null;
     }
 
-    private async Task<SourceTorrentResult?> FetchDetailsAsync(FromTrackerConfig fromTracker, TorznabItem searchItem)
+    private async Task<SourceTorrentResult?> FetchDetailsAsync(
+        FromTrackerConfig fromTracker,
+        TorznabItem searchItem,
+        bool fetchDetails = true)
     {
         var item = searchItem;
-        if (!string.IsNullOrWhiteSpace(searchItem.Id))
+        if (fetchDetails && !string.IsNullOrWhiteSpace(searchItem.Id))
         {
             var detailsItem = (await GetItemsAsync(fromTracker, "details", new Dictionary<string, string>
             {

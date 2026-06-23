@@ -7,6 +7,14 @@ namespace Unit3dDescriptionClone.Services;
 
 internal sealed class F3nixApiClient(HttpClient client) : ISourceTrackerClient
 {
+    public async Task<SourceTorrentResult?> FindSourceTorrentByIdAsync(string torrentId, FromTrackerConfig fromTracker)
+    {
+        if (!int.TryParse(torrentId, out var id))
+            return null;
+
+        return await FetchDetailsAsync(fromTracker, new F3nixSearchItem { Id = id });
+    }
+
     public async Task<SourceTorrentResult?> FindSourceTorrentAsync(string fileName, FromTrackerConfig fromTracker)
     {
         var searchItem = await SearchAsync(fromTracker, new Dictionary<string, string>

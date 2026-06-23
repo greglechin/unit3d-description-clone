@@ -50,7 +50,13 @@ internal sealed class DescriptionCloner(
         }
     }
 
-    public async Task<bool> CloneAsync(string torrentId, bool skipRehosting = false, bool skipAppend = false, bool allowRerun = false)
+    public async Task<bool> CloneAsync(
+        string torrentId,
+        bool skipRehosting = false,
+        bool skipAppend = false,
+        bool allowRerun = false,
+        string? fromTrackerName = null,
+        string? fromTorrentId = null)
     {
         Console.WriteLine($"Cloning description for torrent ID {torrentId}");
 
@@ -103,10 +109,15 @@ internal sealed class DescriptionCloner(
             return false;
         }
 
-        var fromTrackers = config.GetFromTrackersForTorrent(targetTorrent.Attributes.Name);
+        IReadOnlyList<FromTrackerConfig> fromTrackers = fromTrackerName is null
+            ? config.GetFromTrackersForTorrent(targetTorrent.Attributes.Name)
+            : [.. config.FromTrackers.Where(fromTracker =>
+                fromTracker.Url.Contains(fromTrackerName, StringComparison.OrdinalIgnoreCase))];
         if (fromTrackers.Count == 0)
         {
-            Console.WriteLine("No matching [from_tracker] found for this torrent name, aborting.");
+            Console.WriteLine(fromTrackerName is null
+                ? "No matching [from_tracker] found for this torrent name, aborting."
+                : $"No [from_tracker] named '{fromTrackerName}' found, aborting.");
             return false;
         }
         SourceTorrentResult? sourceResult = null;
@@ -119,7 +130,12 @@ internal sealed class DescriptionCloner(
                 TrackerType.TORZNAB => torznabApi,
                 _ => unit3dApi,
             };
-            if (!fromTracker.SupportsFileNameSearch)
+            if (fromTorrentId is not null)
+            {
+                Console.WriteLine($"Fetching source torrent by known ID {fromTorrentId}...");
+                sourceResult = await sourceClient.FindSourceTorrentByIdAsync(fromTorrentId, fromTracker);
+            }
+            else if (!fromTracker.SupportsFileNameSearch)
             {
                 var tmdbId = targetTorrent.Attributes.TmdbId;
                 var imdbId = targetTorrent.Attributes.ImdbId;

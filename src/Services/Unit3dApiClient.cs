@@ -54,6 +54,19 @@ internal sealed class Unit3dApiClient(HttpClient client, AppConfig config) : ISo
         }, AppJsonContext.Default.TorrentInfo);
     }
 
+    async Task<SourceTorrentResult?> ISourceTrackerClient.FindSourceTorrentByIdAsync(string torrentId, FromTrackerConfig fromTracker)
+    {
+        var t = await SendJsonWithRetryAsync(() =>
+        {
+            var req = new HttpRequestMessage(HttpMethod.Get, $"{fromTracker.Url}/api/torrents/{Uri.EscapeDataString(torrentId)}");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", fromTracker.ApiKey);
+            return req;
+        }, AppJsonContext.Default.TorrentInfo, returnNullOnNotFound: true);
+        return t is null
+            ? null
+            : new SourceTorrentResult(t.Id, t.Attributes.Description, t.Attributes.MediaInfo, t.Attributes.Folder, await GetSourceFilesAsync(t.Id, fromTracker));
+    }
+
     public async Task<TorrentsResponse> GetTorrentsPageAsync(string url)
     {
         return (await SendJsonWithRetryAsync(() =>
