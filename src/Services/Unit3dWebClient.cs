@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
 using HtmlAgilityPack;
@@ -56,19 +57,42 @@ internal sealed class Unit3dWebClient(
 
     public static IReadOnlyList<string> ExtractErrors(string html)
     {
+        var errors = new List<string>();
         var doc = ParseHtml(html);
         var errorNodes = doc.DocumentNode.SelectNodes(
             "//*[contains(concat(' ', normalize-space(@class), ' '), ' form__error ') " +
             "or contains(concat(' ', normalize-space(@class), ' '), ' invalid-feedback ') " +
             "or contains(concat(' ', normalize-space(@class), ' '), ' alert--danger ')]");
 
-        if (errorNodes is null)
-            return [];
+        if (errorNodes is not null)
+        {
+            errors.AddRange(errorNodes
+                .Select(n => HttpUtility.HtmlDecode(n.InnerText))
+                .Select(t => Regex.Replace(t, @"\s+", " ").Trim())
+                .Where(t => t.Length > 0));
+        }
 
-        return errorNodes
-            .Select(n => HttpUtility.HtmlDecode(n.InnerText))
-            .Select(t => Regex.Replace(t, @"\s+", " ").Trim())
-            .Where(t => t.Length > 0)
+        var decodedHtml = HttpUtility.HtmlDecode(html);
+        foreach (Match errorsMatch in Regex.Matches(decodedHtml, @"""errors""\s*:\s*\{(?<errors>.*?)\}\s*,\s*""locale""", RegexOptions.Singleline))
+        {
+            foreach (Match messageMatch in Regex.Matches(errorsMatch.Groups["errors"].Value, @"""(?:\\.|[^""\\])*""\s*:\s*\[(?<messages>.*?)\]", RegexOptions.Singleline))
+            {
+                foreach (Match valueMatch in Regex.Matches(messageMatch.Groups["messages"].Value, @"""(?<message>(?:\\.|[^""\\])*)""", RegexOptions.Singleline))
+                {
+                    try
+                    {
+                        var message = JsonSerializer.Deserialize<string>($"\"{valueMatch.Groups["message"].Value}\"");
+                        if (!string.IsNullOrWhiteSpace(message))
+                            errors.Add(Regex.Replace(message, @"\s+", " ").Trim());
+                    }
+                    catch (JsonException)
+                    {
+                    }
+                }
+            }
+        }
+
+        return errors
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }

@@ -468,55 +468,59 @@ internal sealed class DescriptionCloner(
     private async Task SubmitEditAsync(string torrentId, string? description, string? mediaInfo, string? nameOverride)
     {
         var editPageUrl = $"{config.ToTrackerUrl}/torrents/{torrentId}/edit";
-        Console.WriteLine($"Fetching edit page for torrent {torrentId}...");
-        var editHtml = await web.GetEditPageHtmlAsync(torrentId);
-        var editForm = Unit3dWebClient.ParseEditPage(editHtml);
-
-        if (description is not null)
-            editForm.Fields["description"] = description;
-
-        if (!string.IsNullOrEmpty(mediaInfo) &&
-            string.IsNullOrWhiteSpace(editForm.Fields.GetValueOrDefault("mediainfo")))
-            editForm.Fields["mediainfo"] = mediaInfo;
-
-        var formMediaInfo = LayeredHtmlDecode(editForm.Fields.GetValueOrDefault("mediainfo") ?? "");
-        if (!string.IsNullOrWhiteSpace(formMediaInfo))
-            editForm.Fields["mediainfo"] = formMediaInfo;
-
-        var formName = LayeredHtmlDecode(editForm.Fields.GetValueOrDefault("name") ?? "");
-        if (!string.IsNullOrWhiteSpace(formName))
-            editForm.Fields["name"] = formName;
-        if (!string.IsNullOrWhiteSpace(nameOverride))
+        for (var nameConflictSuffix = 0; ; nameConflictSuffix++)
         {
-            editForm.Fields["name"] = nameOverride;
-            Console.WriteLine($"Marking target torrent trumpable: {nameOverride}");
-        }
+            Console.WriteLine($"Fetching edit page for torrent {torrentId}...");
+            var editHtml = await web.GetEditPageHtmlAsync(torrentId);
+            var editForm = Unit3dWebClient.ParseEditPage(editHtml);
 
-        RemoveNonExistentExternalIds(editForm.Fields, editForm.AlpineExists);
-        editForm.Fields.Remove("_token");
-        editForm.Fields.Remove("_method");
+            if (description is not null)
+                editForm.Fields["description"] = description;
 
-        var patchData = new List<KeyValuePair<string, string>>
-        {
-            new("_token", editForm.Csrf!),
-            new("_method", "PATCH"),
-        };
-        patchData.AddRange(editForm.Fields.Select(kvp => new KeyValuePair<string, string>(kvp.Key, kvp.Value)));
+            if (!string.IsNullOrEmpty(mediaInfo) &&
+                string.IsNullOrWhiteSpace(editForm.Fields.GetValueOrDefault("mediainfo")))
+                editForm.Fields["mediainfo"] = mediaInfo;
 
-        if (editForm.Captcha is not null)
-        {
-            patchData.Add(new("_captcha", editForm.Captcha.Token));
-            patchData.Add(new("_username", ""));
-            patchData.Add(new(editForm.Captcha.RandomFieldName, editForm.Captcha.RandomFieldValue));
-        }
+            var formMediaInfo = LayeredHtmlDecode(editForm.Fields.GetValueOrDefault("mediainfo") ?? "");
+            if (!string.IsNullOrWhiteSpace(formMediaInfo))
+                editForm.Fields["mediainfo"] = formMediaInfo;
 
-        var patchResp = await web.SubmitEditFormAsync(torrentId, editPageUrl, patchData);
-        Console.WriteLine(
-            $"Patch response: {(int)patchResp.StatusCode} {patchResp.StatusCode} -> {patchResp.Headers.Location}");
+            var formName = LayeredHtmlDecode(editForm.Fields.GetValueOrDefault("name") ?? "");
+            if (!string.IsNullOrWhiteSpace(formName))
+                editForm.Fields["name"] = formName;
+            if (!string.IsNullOrWhiteSpace(nameOverride))
+            {
+                var name = nameConflictSuffix == 0 ? nameOverride : nameOverride + (nameConflictSuffix + 1);
+                editForm.Fields["name"] = name;
+                Console.WriteLine($"Marking target torrent trumpable: {name}");
+            }
 
-        var redirectUrl = ToAbsolute(patchResp.Headers.Location?.ToString(), config.ToTrackerUrl);
-        if (redirectUrl?.Equals(editPageUrl, StringComparison.OrdinalIgnoreCase) == true)
-        {
+            RemoveNonExistentExternalIds(editForm.Fields, editForm.AlpineExists);
+            editForm.Fields.Remove("_token");
+            editForm.Fields.Remove("_method");
+
+            var patchData = new List<KeyValuePair<string, string>>
+            {
+                new("_token", editForm.Csrf!),
+                new("_method", "PATCH"),
+            };
+            patchData.AddRange(editForm.Fields.Select(kvp => new KeyValuePair<string, string>(kvp.Key, kvp.Value)));
+
+            if (editForm.Captcha is not null)
+            {
+                patchData.Add(new("_captcha", editForm.Captcha.Token));
+                patchData.Add(new("_username", ""));
+                patchData.Add(new(editForm.Captcha.RandomFieldName, editForm.Captcha.RandomFieldValue));
+            }
+
+            var patchResp = await web.SubmitEditFormAsync(torrentId, editPageUrl, patchData);
+            Console.WriteLine(
+                $"Patch response: {(int)patchResp.StatusCode} {patchResp.StatusCode} -> {patchResp.Headers.Location}");
+
+            var redirectUrl = ToAbsolute(patchResp.Headers.Location?.ToString(), config.ToTrackerUrl);
+            if (redirectUrl?.Equals(editPageUrl, StringComparison.OrdinalIgnoreCase) != true)
+                return;
+
             var errorHtml = await web.GetPageHtmlAsync(redirectUrl);
             var errors = Unit3dWebClient.ExtractErrors(errorHtml);
             Console.WriteLine("Patch failed: tracker redirected back to edit page.");
@@ -529,6 +533,10 @@ internal sealed class DescriptionCloner(
                 foreach (var error in errors)
                     Console.WriteLine($"  {error}");
             }
+
+            if (!string.IsNullOrWhiteSpace(nameOverride) &&
+                errors.Any(error => error.Equals("The name has already been taken.", StringComparison.OrdinalIgnoreCase)))
+                continue;
 
             throw new InvalidOperationException("Torrent edit failed.");
         }
