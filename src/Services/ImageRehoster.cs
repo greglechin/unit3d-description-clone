@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Unit3dDescriptionClone.Config;
@@ -48,28 +49,79 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
             uploadStream = rawStream;
         }
 
-        var uploadReq = new HttpRequestMessage(HttpMethod.Post, $"{config.ImageHostUrl}/upload");
-        uploadReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ImageHostApiKey);
-        var fileContent = new StreamContent(uploadStream);
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
-        uploadReq.Content = new MultipartFormDataContent
-        {
-            { fileContent, "files[]", fileName },
-            { new StringContent("description"), "source_type" }
-        };
+        using var uploadBuffer = new MemoryStream();
+        await uploadStream.CopyToAsync(uploadBuffer);
+        var uploadBytes = uploadBuffer.ToArray();
 
-        var resp = await client.SendAsync(uploadReq);
-        resp.EnsureSuccessStatusCode();
-        var result = await resp.Content.ReadFromJsonAsync(AppJsonContext.Default.UploadResponse);
-        var newFullUrl = result!.Files[0].Url;
-        var newThumbnailUrl = result!.Files[0].Thumbnail_url;
-        Console.WriteLine($"    -> {newFullUrl}");
-        Console.WriteLine($"    -> {newThumbnailUrl}");
-        return new RehostedImage()
+        var resp = await SendWithRetryAsync(() =>
         {
-            Full = newFullUrl,
-            Thumbnail = newThumbnailUrl
-        };
+            var uploadReq = new HttpRequestMessage(HttpMethod.Post, $"{config.ImageHostUrl}/upload");
+            uploadReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ImageHostApiKey);
+            var fileContent = new StreamContent(new MemoryStream(uploadBytes));
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            uploadReq.Content = new MultipartFormDataContent
+            {
+                { fileContent, "files[]", fileName },
+                { new StringContent("description"), "source_type" }
+            };
+            return uploadReq;
+        });
+        if (resp is null)
+            return null;
+
+        using (resp)
+        {
+            if (!resp.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"    Failed to upload image ({(int)resp.StatusCode}), aborting.");
+                return null;
+            }
+
+            var result = await resp.Content.ReadFromJsonAsync(AppJsonContext.Default.UploadResponse);
+            var newFullUrl = result!.Files[0].Url;
+            var newThumbnailUrl = result!.Files[0].Thumbnail_url;
+            Console.WriteLine($"    -> {newFullUrl}");
+            Console.WriteLine($"    -> {newThumbnailUrl}");
+            return new RehostedImage()
+            {
+                Full = newFullUrl,
+                Thumbnail = newThumbnailUrl
+            };
+        }
+    }
+
+    private async Task<HttpResponseMessage?> SendWithRetryAsync(Func<HttpRequestMessage> buildRequest)
+    {
+        for (var attempt = 0; attempt <= FetchRetries; attempt++)
+        {
+            try
+            {
+                using var req = buildRequest();
+                var resp = await client.SendAsync(req);
+                if ((resp.StatusCode != HttpStatusCode.RequestTimeout
+                        && resp.StatusCode != HttpStatusCode.TooManyRequests
+                        && (int)resp.StatusCode < 500)
+                    || attempt == FetchRetries)
+                    return resp;
+
+                Console.WriteLine($"    Upload failed ({(int)resp.StatusCode}), retrying ({attempt + 1}/{FetchRetries})...");
+                resp.Dispose();
+                await Task.Delay(1000);
+            }
+            catch (Exception) when (attempt < FetchRetries)
+            {
+                Console.WriteLine($"    Upload failed, retrying ({attempt + 1}/{FetchRetries})...");
+                await Task.Delay(1000);
+            }
+            catch (Exception)
+            {
+                Console.WriteLine($"    Failed to upload image after {FetchRetries + 1} attempts, aborting.");
+                return null;
+            }
+        }
+
+        Console.WriteLine($"    Failed to upload image after {FetchRetries + 1} attempts, aborting.");
+        return null;
     }
 
     public async Task<(bool IsImage, string ImageUrl)> GetImageFromHref(string imageUrl)
