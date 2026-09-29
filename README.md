@@ -28,9 +28,28 @@ remain accessible on the target tracker.
    `[spoiler=original info]...[/spoiler]` block appended after the new description. If
    such a block already exists from a previous run, it is reused rather than nested.
 11. Every image URL found in `[img]`, `[url][img]`, and `[comparison]` BBCode tags is
-   downloaded and re-uploaded to the configured image host. SVG images are converted to
-   PNG before uploading. Images listed in `[known_images]` are substituted directly
-   without re-uploading. (This step can be skipped with `--no-rehost`.)
+   downloaded and re-uploaded to the configured image host. A `[url=][img][/img][/url]`
+   wrapper is checked for a genuinely higher-resolution version behind the click-through
+   link (verified by size against the embedded thumbnail, not just accepted on faith) -
+   if one is found, it is uploaded separately and used as the click-through target while
+   the thumbnail stays the visible image. SVG images are converted to PNG before
+   uploading. Images listed in `[known_images]` are substituted directly without
+   re-uploading. (This step can be skipped with `--no-rehost`.)
+
+   An image that is confirmed dead (its source returns 404/410) is left pointing at its
+   original link unless `placeholder_image` is configured, in which case only that
+   confirmed-dead image is replaced with the placeholder. An image that merely couldn't
+   be fetched right now (timeout, 5xx, rate limit, a failed upload, ...) is always left
+   at its original link, regardless of `placeholder_image` - a temporary failure is not
+   evidence the image is actually gone. Either way, one image that can't be rehosted
+   never aborts the clone or affects any other image in the description.
+
+   A handful of hosts (`ptpimg.me`, `seedimg.org`) are hardcoded as manually confirmed
+   gone for good, not just having a bad moment - an image on one of these is deleted from
+   the description entirely (the whole `[img]` tag, and its `[url=]` wrapper if any),
+   rather than left as a permanently-broken link or replaced with a placeholder. Any
+   `[center][/center]` left empty by the deletion, and any run of blank lines it leaves
+   behind, is cleaned up automatically.
 12. The optional `[description_append]` config section is appended to the final description
     unless skipped with `--no-append`.
 13. The tool logs in to the target tracker (caching the session in `cache/`), opens the
@@ -98,8 +117,9 @@ totp_secret = <Base32-encoded TOTP secret, leave blank if 2FA is not enabled>
 [image_host]
 url = https://images.example
 api_key = <Image host API key>
-; Optional: URL to substitute when an image cannot be fetched after all retries.
-; If omitted, the clone is aborted when an image fails to download.
+; Optional: URL to substitute for an image that is CONFIRMED dead (404/410). A merely
+; temporary failure (timeout, 5xx, rate limit, ...) is never replaced with this, only left
+; at its original link. If omitted, a confirmed-dead image is left at its original link too.
 ; placeholder_image = https://images.example/placeholder.png
 
 ; Optional: map source image URLs directly to already-rehosted URLs.

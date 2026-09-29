@@ -32,9 +32,13 @@ totp_secret =
 
 [image_host]
 url = https://i.tracker.org
-api_key = 
-; Optional: URL to substitute when an image cannot be fetched after all retries.
-; If omitted, the clone is aborted when an image fails to download.
+api_key =
+; Optional: URL to substitute for an image that is CONFIRMED dead (its source returned 404/410).
+; An image that merely couldn't be fetched right now (timeout, 5xx, rate limit, ...) is never
+; replaced with this - only a confirmed-gone one is, since a temporary failure is not evidence
+; the image is actually gone. If omitted, a confirmed-dead image is left pointing at its original
+; (now broken) link instead of being replaced with anything. Either way, one bad image never stops
+; the rest of the description - or the clone as a whole - from being processed.
 ; placeholder_image = https://i.tracker.org/placeholder.png
 
 ; Optional: remove lines from the source description that match any of the given patterns.

@@ -232,10 +232,11 @@ internal sealed class DescriptionCloner(
         description.Insert(0, "[code]");
         description.Append("[/code]");
 
-        if (!skipRehosting && !await RehostImagesAsync(description))
+        if (!skipRehosting)
         {
-            Console.WriteLine("Image rehosting failed");
-            return CloneOutcome.Failed;
+            var (rehosted, dead, unavailable, deadHostRemoved) = await RehostImagesAsync(description);
+            Console.WriteLine($"Image rehosting: {rehosted} rehosted, {dead} confirmed dead (left as-is), " +
+                $"{unavailable} temporarily unavailable (left as-is), {deadHostRemoved} removed entirely (confirmed-dead host).");
         }
 
         if (originalDescriptionSpoiler is not null)
@@ -410,7 +411,35 @@ internal sealed class DescriptionCloner(
         description.Append(result);
     }
 
-    private async Task<bool> RehostImagesAsync(StringBuilder description)
+    /// <summary>
+    /// Rehosts every image found in the description. A single image that can't be rehosted - dead,
+    /// temporarily unreachable, or a failed upload - never aborts the clone and never has its original
+    /// link(s) replaced with anything (a placeholder included, unless the image is CONFIRMED dead and
+    /// placeholder_image is configured): the description keeps pointing at the original source for that
+    /// one image, and every other image is still processed normally.
+    /// </summary>
+    private static readonly Regex EmptyCenterRegex = new(@"\[center\]\s*\[/center\]", RegexOptions.IgnoreCase);
+    private static readonly Regex ExcessBlankLinesRegex = new(@"(\r?\n){3,}");
+
+    /// <summary>
+    /// Deleting an image block can leave an empty [center][/center] behind (a screenshot is routinely
+    /// wrapped solo) and/or a run of blank lines where the block used to be. Repeated, since removing
+    /// one empty [center] can occasionally expose a now-empty parent.
+    /// </summary>
+    private static void CleanUpAfterRemoval(StringBuilder description)
+    {
+        string text, prev;
+        do
+        {
+            prev = description.ToString();
+            text = EmptyCenterRegex.Replace(prev, "");
+        } while (text != prev);
+        text = ExcessBlankLinesRegex.Replace(text, "\n\n");
+        description.Clear();
+        description.Append(text);
+    }
+
+    private async Task<(int Rehosted, int Dead, int Unavailable, int DeadHostRemoved)> RehostImagesAsync(StringBuilder description)
     {
         var str = description.ToString();
 
@@ -423,13 +452,20 @@ internal sealed class DescriptionCloner(
         var comparisonRegex = new Regex(
             @"\[comparison[^\]]*\](?<content>.*?)\[/comparison\]",
             RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        var urlRegex = new Regex(@"https?://\S+", RegexOptions.IgnoreCase);
+        // Restricted to an actual image-file extension (unlike a blanket https?://\S+) so a comparison
+        // block's non-image text - a link to the comparison tool's own page, a note, etc. - is never
+        // mistaken for an image to rehost.
+        var urlRegex = new Regex(@"https?://\S+\.(?:jpe?g|png|gif|webp|bmp)(?:\?\S*)?", RegexOptions.IgnoreCase);
 
-        var images = new List<(string ImgUrl, string? HrefUrl)>();
+        // FullMatch is the exact bbcode text this image occupies - for a plain or [url=]-wrapped [img],
+        // that's the whole tag (and its wrapper); for a bare comparison-block URL, it's just the URL
+        // itself. Deleting FullMatch (rather than just the inner URL) is what lets a known-dead-host
+        // image be removed with nothing left behind at all, not even an empty [img][/img].
+        var images = new List<(string ImgUrl, string? HrefUrl, string FullMatch)>();
 
         var urlWrappedMatches = urlWrappedImgRegex.Matches(str);
         foreach (Match m in urlWrappedMatches)
-            images.Add((m.Groups["img"].Value, m.Groups["href"].Value));
+            images.Add((m.Groups["img"].Value, m.Groups["href"].Value, m.Value));
 
         var coveredRanges = urlWrappedMatches.Cast<Match>()
             .Select(m => (Start: m.Index, End: m.Index + m.Length))
@@ -438,17 +474,23 @@ internal sealed class DescriptionCloner(
         foreach (Match m in plainImgRegex.Matches(str))
         {
             if (!coveredRanges.Any(r => m.Index >= r.Start && m.Index < r.End))
-                images.Add((m.Groups["img"].Value, null));
+                images.Add((m.Groups["img"].Value, null, m.Value));
         }
 
         foreach (Match m in comparisonRegex.Matches(str))
             foreach (var sm in urlRegex.Matches(m.Groups["content"].Value).Select(u => u.Value))
-                images.Add((sm, null));
+                images.Add((sm, null, sm));
 
         images = [.. images.Where(i => !i.ImgUrl.Contains(config.ImageHostUrl, StringComparison.OrdinalIgnoreCase))];
 
         Console.WriteLine($"Found {images.Count} image(s) to rehost...");
-        foreach (var (imgUrl, hrefUrl) in images)
+        var rehostedCount = 0;
+        var deadCount = 0;
+        var unavailableCount = 0;
+        var deadHostRemovedCount = 0;
+        var removedAnything = false;
+
+        foreach (var (imgUrl, hrefUrl, fullMatch) in images)
         {
             if (string.IsNullOrEmpty(imgUrl)) continue;
             if (config.KnownImages.TryGetValue(imgUrl, out var knownUrl))
@@ -457,39 +499,68 @@ internal sealed class DescriptionCloner(
                 description.Replace(imgUrl, knownUrl);
                 if (hrefUrl is not null && hrefUrl != imgUrl)
                     description.Replace(hrefUrl, knownUrl);
+                rehostedCount++;
                 continue;
             }
 
-            var fetchUrl = imgUrl;
-            if (hrefUrl != null)
+            var mediumResult = await imageRehoster.RehostAsync(imgUrl);
+            if (mediumResult.Status == RehostStatus.KnownDeadHost)
             {
-                var hrefIsImage = false;
-                var hrefImageUrl = "";
-                try
+                deadHostRemovedCount++;
+                removedAnything = true;
+                ReplaceIgnoreCase(description, fullMatch, "");
+                Console.WriteLine($"  Removed entirely: {imgUrl} ({mediumResult.Detail})");
+                continue;
+            }
+            if (mediumResult.Status != RehostStatus.Success)
+            {
+                if (mediumResult.Status == RehostStatus.ConfirmedDead) deadCount++;
+                else unavailableCount++;
+                Console.WriteLine($"  Leaving as-is: {imgUrl} ({mediumResult.Detail})");
+                continue;
+            }
+            rehostedCount++;
+            var mediumImage = mediumResult.Image!;
+
+            if (hrefUrl is null || hrefUrl == imgUrl)
+            {
+                description.Replace(imgUrl, mediumImage.Full);
+                continue;
+            }
+
+            var hrefIsImage = false;
+            var hrefImageUrl = "";
+            try
+            {
+                (hrefIsImage, hrefImageUrl) = await imageRehoster.GetImageFromHref(hrefUrl, mediumResult.SourceSizeBytes);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"    Could not resolve a full-resolution image for {hrefUrl}: {e.Message}");
+            }
+
+            if (hrefIsImage)
+            {
+                var fullResult = await imageRehoster.RehostAsync(hrefImageUrl);
+                if (fullResult.Status == RehostStatus.Success)
                 {
-                    (hrefIsImage, hrefImageUrl) = await imageRehoster.GetImageFromHref(hrefUrl);
+                    ReplaceIgnoreCase(description, "[url=" + hrefUrl + "]", "[url=" + fullResult.Image!.Full + "]");
+                    description.Replace(imgUrl, mediumImage.Thumbnail);
+                    continue;
                 }
-                catch (Exception) { }
-                if (hrefIsImage)
-                    fetchUrl = hrefImageUrl;
+                Console.WriteLine($"    Full-resolution image found but its upload failed ({fullResult.Detail}) - using the same image for the click-through link too.");
             }
 
-            var newImageUrls = await imageRehoster.RehostAsync(fetchUrl);
-            if (newImageUrls is null)
-                return false;
-
-            if (hrefUrl is not null)
-            {
-                ReplaceIgnoreCase(description, "[url=" + hrefUrl + "]", "[url=" + newImageUrls.Full + "]");
-                description.Replace(imgUrl, newImageUrls.Thumbnail);
-            }
-            else
-            {
-                description.Replace(imgUrl, newImageUrls.Full);
-            }
+            // No separate, genuinely-bigger full-resolution version found (or it failed to upload) -
+            // point the click-through at the same single upload, same as if there were no wrapper at all.
+            ReplaceIgnoreCase(description, "[url=" + hrefUrl + "]", "[url=" + mediumImage.Full + "]");
+            description.Replace(imgUrl, mediumImage.Thumbnail);
         }
 
-        return true;
+        if (removedAnything)
+            CleanUpAfterRemoval(description);
+
+        return (rehostedCount, deadCount, unavailableCount, deadHostRemovedCount);
     }
 
     private void AppendDescriptionSuffix(StringBuilder description)
