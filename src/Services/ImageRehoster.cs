@@ -49,8 +49,32 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
     private static bool IsKnownDeadHost(string url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) && KnownDeadHosts.Contains(uri.Host);
 
+    // Hosts paused for right now, for operational reasons only - NOT a dead-host verdict (that's
+    // KnownDeadHosts above). imgbox.com is a real, ongoing outage: skip it outright, with no fetch
+    // attempt at all, rather than burn retries on every single imgbox link while it's down. Matched
+    // hosts are left completely untouched in the description - no placeholder, nothing replaced -
+    // so the original link is still there to resolve once the host is back. Remove a host from here
+    // (or empty the set) once it's confirmed back up.
+    private static readonly HashSet<string> TemporarilyPausedHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "imgbox.com",
+    };
+
+    // Matches any subdomain too (images2.imgbox.com, thumbs2.imgbox.com, 8-t.imgbox.com, ...).
+    internal static bool IsTemporarilyPausedHost(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && TemporarilyPausedHosts.Any(h => uri.Host.Equals(h, StringComparison.OrdinalIgnoreCase)
+            || uri.Host.EndsWith("." + h, StringComparison.OrdinalIgnoreCase));
+
     public async Task<RehostResult> RehostAsync(string imageUrl)
     {
+        if (IsTemporarilyPausedHost(imageUrl))
+        {
+            const string detail = "host is temporarily paused (known ongoing outage) - leaving the original link as-is, no fetch attempted";
+            Console.WriteLine($"  {imageUrl}: {detail}");
+            return new RehostResult(RehostStatus.TemporarilyUnavailable, null, detail);
+        }
+
         if (IsKnownDeadHost(imageUrl))
         {
             const string detail = "host is manually confirmed dead for good - deleting this image's block from the description";

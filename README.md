@@ -50,6 +50,14 @@ remain accessible on the target tracker.
    rather than left as a permanently-broken link or replaced with a placeholder. Any
    `[center][/center]` left empty by the deletion, and any run of blank lines it leaves
    behind, is cleaned up automatically.
+
+   `imgbox.com` is hardcoded separately as temporarily paused (an ongoing outage, not a
+   confirmed-dead verdict): any image or click-through link on that host is skipped with
+   no fetch attempted at all, and is left completely untouched in the description - no
+   deletion, no placeholder, no replacement. This applies whether the visible image
+   itself is on imgbox.com, or only its click-through wrapper is (the visible thumbnail
+   still rehosts normally in that case). Remove `imgbox.com` from the hardcoded list once
+   the host is confirmed back up.
 12. The optional `[description_append]` config section is appended to the final description
     unless skipped with `--no-append`.
 13. The tool logs in to the target tracker (caching the session in `cache/`), opens the

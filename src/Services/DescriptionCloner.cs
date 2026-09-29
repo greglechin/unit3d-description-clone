@@ -528,6 +528,17 @@ internal sealed class DescriptionCloner(
                 continue;
             }
 
+            if (ImageRehoster.IsTemporarilyPausedHost(hrefUrl))
+            {
+                // The visible thumbnail (imgUrl) rehosted fine and isn't on a paused host itself - only
+                // its click-through wrapper points at one (e.g. imgbox.com). Leave that wrapper's href
+                // completely untouched (no fetch, no replacement) rather than resolving or repointing it,
+                // same as the imgUrl-is-the-paused-host case in ImageRehoster.RehostAsync.
+                Console.WriteLine($"    Click-through link {hrefUrl} is on a temporarily paused host - leaving it as-is.");
+                description.Replace(imgUrl, mediumImage.Full);
+                continue;
+            }
+
             var hrefIsImage = false;
             var hrefImageUrl = "";
             try
