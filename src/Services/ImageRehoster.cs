@@ -66,6 +66,66 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
         && TemporarilyPausedHosts.Any(h => uri.Host.Equals(h, StringComparison.OrdinalIgnoreCase)
             || uri.Host.EndsWith("." + h, StringComparison.OrdinalIgnoreCase));
 
+    // Ordinary web links that must never be treated as a click-through to a bigger picture, the same
+    // role Python migration's NON_IMAGE_LINK_HOSTS/is_image_click_through() plays. Without this,
+    // CandidateFullUrls' generic "try the href itself" / og:image fallbacks will treat ANY link as a
+    // potential full-resolution candidate - confirmed real damage from exactly that gap, twice: the
+    // Python tool once replaced footer links on 10 Anime torrents with github's/rust-lang's own social
+    // preview images, and separately had a torrent's uploader-credit link (a Codeberg project page,
+    // seedpool 121524) resolved to that page's auto-generated social-preview PNG and uploaded as if it
+    // were the torrent's real cover art. Both class of mistake apply here exactly as much as there.
+    private static readonly HashSet<string> NonImageLinkHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "seedbrr.com", "github.com", "rust-lang.org", "imdb.com", "themoviedb.org", "thetvdb.com",
+        "myanimelist.net", "anidb.net", "steampowered.com", "youtube.com", "youtu.be", "wikipedia.org",
+        "codeberg.org", "gitlab.com", "bitbucket.org", "sourceforge.net", "sr.ht",
+    };
+
+    private static bool IsNonImageLinkHost(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && NonImageLinkHosts.Any(h => uri.Host.Equals(h, StringComparison.OrdinalIgnoreCase)
+            || uri.Host.EndsWith("." + h, StringComparison.OrdinalIgnoreCase));
+
+    // A real direct full-resolution image link essentially always ends in a recognized image
+    // extension; an auto-generated page endpoint (a social-preview card, an og:image redirect, ...)
+    // usually doesn't, even though it genuinely serves image/* content when fetched directly. This is
+    // the pattern-based safety net (vs. NonImageLinkHosts' list-based one) - it catches a host that was
+    // never specifically added to the list above. Confirmed real case it would have caught: Codeberg's
+    // /-/summary-card endpoint (seedpool 121524) - no file extension at all, yet a real PNG.
+    private static readonly HashSet<string> KnownImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "jpg", "jpeg", "png", "gif", "webp", "bmp", "avif",
+    };
+
+    private static bool HasKnownImageExtension(string url)
+    {
+        var path = url.Split('?')[0];
+        var ext = Path.GetExtension(path).TrimStart('.');
+        return KnownImageExtensions.Contains(ext);
+    }
+
+    // Per-host pacing for downloads from external image hosts, mirroring the Python migration's
+    // _pace_host_request(). Confirmed real case there (seedpool 121540, 6 large ibb.co images in one
+    // torrent): the first 3 downloaded fine back-to-back with no delay, the next 3 came back as
+    // inconclusive/throttled responses - re-fetching the exact same URLs later, unmodified, succeeded
+    // immediately. Nothing here is Python-specific; the same host would very plausibly throttle this
+    // tool's requests the same way under the same conditions.
+    private readonly Dictionary<string, DateTime> hostLastRequestTime = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly TimeSpan HostDownloadMinInterval = TimeSpan.FromSeconds(2);
+
+    private async Task PaceHostRequestAsync(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return;
+        if (hostLastRequestTime.TryGetValue(uri.Host, out var last))
+        {
+            var wait = HostDownloadMinInterval - (DateTime.UtcNow - last);
+            if (wait > TimeSpan.Zero)
+                await Task.Delay(wait);
+        }
+        hostLastRequestTime[uri.Host] = DateTime.UtcNow;
+    }
+
     public async Task<RehostResult> RehostAsync(string imageUrl)
     {
         if (IsTemporarilyPausedHost(imageUrl))
@@ -242,12 +302,18 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
     /// Resolves a click-through href to the true full-resolution image, verifying it against the size of
     /// the thumbnail already embedded in the description so a same-size or smaller "full" (a wrong guess,
     /// or a host that doesn't actually have a bigger version) is never silently accepted as real.
-    /// Returns null if nothing usable was found - the caller then falls back to using the thumbnail for
-    /// both the visible image and the click-through target, exactly as it would if there were no wrapper
-    /// at all, rather than losing the thumbnail entirely to a bad "full" guess.
+    /// Returns (false, "") if nothing usable was found, or if hrefUrl is a known ordinary (non-image)
+    /// link - the caller then leaves the original click-through link completely untouched rather than
+    /// losing it to a bad "full" guess (see the critical note at this method's call site).
     /// </summary>
     public async Task<(bool IsImage, string ImageUrl)> GetImageFromHref(string hrefUrl, long? thumbnailSizeBytes)
     {
+        if (IsNonImageLinkHost(hrefUrl))
+        {
+            Console.WriteLine($"    {hrefUrl} is a known ordinary (non-image) link host - never treated as a click-through.");
+            return (false, "");
+        }
+
         await foreach (var candidate in CandidateFullUrls(hrefUrl))
         {
             byte[]? bytes;
@@ -266,6 +332,12 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
             if (thumbnailSizeBytes is { } known && bytes.Length <= known)
             {
                 Console.WriteLine($"    Full-resolution candidate {candidate} is not bigger than the thumbnail ({bytes.Length} vs {known} bytes) - skipping it.");
+                continue;
+            }
+
+            if (!HasKnownImageExtension(candidate))
+            {
+                Console.WriteLine($"    Full-resolution candidate {candidate} has no recognized image file extension despite an image/* response - likely an auto-generated page preview rather than the real file, skipping it.");
                 continue;
             }
 
@@ -323,6 +395,7 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
         HttpResponseMessage resp;
         try
         {
+            await PaceHostRequestAsync(pageUrl);
             resp = await client.SendAsync(new HttpRequestMessage(HttpMethod.Get, pageUrl));
             resp.EnsureSuccessStatusCode();
         }
@@ -363,6 +436,7 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
         {
             try
             {
+                await PaceHostRequestAsync(imageUrl);
                 var resp = await client.SendAsync(new HttpRequestMessage(HttpMethod.Get, imageUrl));
                 lastStatusCode = resp.StatusCode;
                 if (resp.IsSuccessStatusCode && resp.Content is not null)

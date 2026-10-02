@@ -559,12 +559,22 @@ internal sealed class DescriptionCloner(
                     description.Replace(imgUrl, mediumImage.Thumbnail);
                     continue;
                 }
-                Console.WriteLine($"    Full-resolution image found but its upload failed ({fullResult.Detail}) - using the same image for the click-through link too.");
+                Console.WriteLine($"    Full-resolution image found but its upload failed ({fullResult.Detail}) - leaving the original click-through link as-is so the real source is still reachable.");
+            }
+            else
+            {
+                Console.WriteLine($"    No separate, genuinely-bigger full-resolution version found for {hrefUrl} - leaving the original click-through link as-is so the real source is still reachable.");
             }
 
-            // No separate, genuinely-bigger full-resolution version found (or it failed to upload) -
-            // point the click-through at the same single upload, same as if there were no wrapper at all.
-            ReplaceIgnoreCase(description, "[url=" + hrefUrl + "]", "[url=" + mediumImage.Full + "]");
+            // CRITICAL: never replace [url=hrefUrl] with the medium upload here. This used to
+            // silently collapse the click-through link to the exact same file already shown as
+            // the thumbnail, permanently erasing the only remaining path back to the real
+            // external source - confirmed as a real, already-happened data-loss bug in the
+            // companion Python migration tool (seedpool 144472's second image: its wrapper and
+            // thumbnail ended up as the literal same uploaded file, and the original full-size
+            // image's only link was gone for good). Leaving hrefUrl completely untouched means a
+            // human can still click through to the real source, and a later run can still try to
+            // resolve it again. The visible thumbnail still gets migrated either way.
             description.Replace(imgUrl, mediumImage.Thumbnail);
         }
 
