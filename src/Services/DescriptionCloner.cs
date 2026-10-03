@@ -302,6 +302,17 @@ internal sealed class DescriptionCloner(
             }
         }
 
+        var extraFiles = targetTorrent.Files
+            .Where(file => !file.Name.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))
+            .Where(file => FindSourceFile(file.Name, sourceTorrent.Files) is null)
+            .ToList();
+        if (extraFiles.Count > 0)
+        {
+            reason = "Extra files unmatched at source: " + string.Join(", ", extraFiles.Select(file => file.Name));
+            Console.WriteLine($"  {reason}");
+            return true;
+        }
+
         var sourceUniqueId = Regex.Match(sourceTorrent.MediaInfo ?? "", @"^\s*Unique\s*ID\s*:\s*(?<id>.+?)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
         if (sourceUniqueId.Success)
         {
