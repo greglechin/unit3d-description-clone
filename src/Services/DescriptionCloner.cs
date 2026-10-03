@@ -270,7 +270,7 @@ internal sealed class DescriptionCloner(
             return true;
         }
 
-        if (targetFiles.FirstOrDefault(file => NormalizeTorrentPath(GetTargetTorrentPath(targetTorrent.Folder, file.Name)).Count(c => c == '/') > 1) is not null)
+        if (targetFiles.Any(file => GetTargetPathDepth(targetTorrent.Folder, file.Name) > 1))
         {
             reason = "Target MKV file(s) are more than 1 folder deep.";
             Console.WriteLine($"  {reason}");
@@ -361,16 +361,15 @@ internal sealed class DescriptionCloner(
 
     private static string NormalizeTorrentPath(string path) => path.Replace('\\', '/').TrimStart('/');
 
-    private static string GetTargetTorrentPath(string? rootFolder, string fileName)
+    private static int GetTargetPathDepth(string? rootFolder, string fileName)
     {
-        var normalizedFileName = NormalizeTorrentPath(fileName);
+        var normalized = fileName.Replace('\\', '/');
         if (string.IsNullOrWhiteSpace(rootFolder))
-            return normalizedFileName;
-
-        var normalizedRootFolder = NormalizeTorrentPath(rootFolder).TrimEnd('/');
-        return normalizedFileName.StartsWith($"{normalizedRootFolder}/", StringComparison.OrdinalIgnoreCase)
-            ? normalizedFileName
-            : $"{normalizedRootFolder}/{normalizedFileName}";
+            return normalized.Count(c => c == '/');
+        var root = NormalizeTorrentPath(rootFolder).TrimEnd('/');
+        return normalized.StartsWith($"{root}/", StringComparison.OrdinalIgnoreCase)
+            ? normalized.Count(c => c == '/')
+            : normalized.Count(c => c == '/') + 1;
     }
 
     private static string GetTorrentFileName(string path)
