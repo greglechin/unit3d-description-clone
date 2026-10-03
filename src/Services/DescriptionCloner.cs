@@ -335,17 +335,28 @@ internal sealed class DescriptionCloner(
 
     private static TorrentFile? FindSourceFile(string targetName, IReadOnlyList<TorrentFile> sourceFiles)
     {
-        var normalizedTarget = NormalizeTorrentPath(targetName);
-        var exact = sourceFiles.FirstOrDefault(file =>
-            NormalizeTorrentPath(file.Name).Equals(normalizedTarget, StringComparison.OrdinalIgnoreCase));
-        if (exact is not null)
-            return exact;
+        var target = targetName.Replace('\\', '/');
+        var targetFileName = GetTorrentFileName(target);
+        var targetSubFolder = GetSubFolder(target);
+        var targetDepth = target.Count(c => c == '/');
 
-        var targetFileName = GetTorrentFileName(normalizedTarget);
-        var basenameMatches = sourceFiles
-            .Where(file => GetTorrentFileName(NormalizeTorrentPath(file.Name)).Equals(targetFileName, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        return basenameMatches.Count == 1 ? basenameMatches[0] : null;
+        foreach (var sourceFile in sourceFiles)
+        {
+            var source = sourceFile.Name.Replace('\\', '/');
+            if (GetTorrentFileName(source).Equals(targetFileName, StringComparison.OrdinalIgnoreCase) &&
+                GetSubFolder(source) == targetSubFolder &&
+                source.Count(c => c == '/') == targetDepth)
+            {
+                return sourceFile;
+            }
+        }
+        return null;
+    }
+
+    private static string GetSubFolder(string normalizedPath)
+    {
+        var slashIndex = normalizedPath.LastIndexOf('/');
+        return slashIndex < 0 ? "" : normalizedPath[..slashIndex].TrimStart('/');
     }
 
     private static string NormalizeTorrentPath(string path) => path.Replace('\\', '/').TrimStart('/');
