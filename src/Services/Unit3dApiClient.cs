@@ -63,8 +63,8 @@ internal sealed class Unit3dApiClient(HttpClient client, AppConfig config) : ISo
             return req;
         }, AppJsonContext.Default.TorrentInfo, returnNullOnNotFound: true);
         if (t is null) return null;
-        var (files, _) = await GetSourceFilesAsync(t.Id, fromTracker);
-        return new SourceTorrentResult(t.Id, t.Attributes.Description, t.Attributes.MediaInfo, t.Attributes.Folder, files);
+        var (files, folder) = await GetSourceFilesAsync(t.Id, fromTracker);
+        return new SourceTorrentResult(t.Id, t.Attributes.Description, t.Attributes.MediaInfo, folder, files);
     }
 
     public async Task<TorrentsResponse> GetTorrentsPageAsync(string url)
@@ -153,6 +153,8 @@ internal sealed class Unit3dApiClient(HttpClient client, AppConfig config) : ISo
     {
         Console.WriteLine($"Downloading source torrent file (ID {torrentId})...");
         var (bytes, folder) = await DownloadTorrentFileAsync(torrentId, fromTracker);
+        if (string.IsNullOrWhiteSpace(folder))
+            folder = TorrentFileParser.GetFolderName(bytes);
         return (TorrentFileParser.GetFiles(bytes), folder);
     }
 
