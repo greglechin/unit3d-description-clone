@@ -490,6 +490,10 @@ internal sealed class DescriptionCloner(
         var deadHostRemovedCount = 0;
         var removedAnything = false;
 
+        // Phase 1: rehost every thumbnail/medium image. Href resolution is deferred to phase 2 so
+        // the sibling-mismatch check below can see every href's outcome before anything is applied
+        // to `description`.
+        var prepared = new List<(string ImgUrl, string? HrefUrl, string FullMatch, RehostResult MediumResult)>();
         foreach (var (imgUrl, hrefUrl, fullMatch) in images)
         {
             if (string.IsNullOrEmpty(imgUrl)) continue;
@@ -519,6 +523,69 @@ internal sealed class DescriptionCloner(
                 Console.WriteLine($"  Leaving as-is: {imgUrl} ({mediumResult.Detail})");
                 continue;
             }
+            prepared.Add((imgUrl, hrefUrl, fullMatch, mediumResult));
+        }
+
+        // Phase 2: resolve every distinct href up front (no replacements applied yet), then run the
+        // sibling-mismatch safeguard across all of them together. Per the user's explicit instruction
+        // (2026-10-05, seedpool 220786's second screenshot): a torrent's screenshots are near-always
+        // produced by the same tool/uploader in one pass, so if some hrefs in this description resolve
+        // to a genuinely bigger full-resolution file while one resolves to the exact same file as its
+        // own thumbnail, that split itself is the signal something glitched on that one request - it
+        // is not proof that particular image legitimately lacks a separate full version. A description
+        // where EVERY href resolves to "same" (e.g. a host that doesn't do two-tier images at all) is
+        // left alone - that's a uniform, not a suspicious, outcome.
+        var hrefOutcomes = new Dictionary<string, (string Classification, string FullUrl)>();
+        foreach (var (imgUrl, hrefUrl, _, mediumResult) in prepared)
+        {
+            if (hrefUrl is null || hrefUrl == imgUrl || hrefOutcomes.ContainsKey(hrefUrl))
+                continue;
+            if (ImageRehoster.IsTemporarilyPausedHost(hrefUrl))
+                continue;   // handled directly in phase 3, never a candidate for the mismatch check
+
+            var hrefIsImage = false;
+            var hrefImageUrl = "";
+            try
+            {
+                (hrefIsImage, hrefImageUrl) = await imageRehoster.GetImageFromHref(hrefUrl, mediumResult.SourceSizeBytes);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"    Could not resolve a full-resolution image for {hrefUrl}: {e.Message}");
+            }
+
+            if (!hrefIsImage)
+            {
+                hrefOutcomes[hrefUrl] = ("failed", "");
+            }
+            else if (hrefImageUrl == imgUrl)
+            {
+                hrefOutcomes[hrefUrl] = ("same", mediumResult.Image!.Full);
+            }
+            else
+            {
+                var fullResult = await imageRehoster.RehostAsync(hrefImageUrl);
+                hrefOutcomes[hrefUrl] = fullResult.Status == RehostStatus.Success
+                    ? ("bigger", fullResult.Image!.Full)
+                    : ("failed", "");
+            }
+        }
+
+        if (hrefOutcomes.Values.Any(v => v.Classification == "bigger"))
+        {
+            foreach (var hrefUrl in hrefOutcomes.Keys.ToList())
+            {
+                if (hrefOutcomes[hrefUrl].Classification == "same")
+                {
+                    Console.WriteLine($"    {hrefUrl} resolved to the same file as its thumbnail, but a sibling image in this description found a genuinely bigger one - treating this one as unresolved rather than trusting the match.");
+                    hrefOutcomes[hrefUrl] = ("failed", "");
+                }
+            }
+        }
+
+        // Phase 3: apply every replacement now that every href's final classification is known.
+        foreach (var (imgUrl, hrefUrl, _, mediumResult) in prepared)
+        {
             rehostedCount++;
             var mediumImage = mediumResult.Image!;
 
@@ -539,32 +606,15 @@ internal sealed class DescriptionCloner(
                 continue;
             }
 
-            var hrefIsImage = false;
-            var hrefImageUrl = "";
-            try
+            var (classification, fullUrl) = hrefOutcomes.TryGetValue(hrefUrl, out var o) ? o : ("failed", "");
+            if (classification is "bigger" or "same")
             {
-                (hrefIsImage, hrefImageUrl) = await imageRehoster.GetImageFromHref(hrefUrl, mediumResult.SourceSizeBytes);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"    Could not resolve a full-resolution image for {hrefUrl}: {e.Message}");
+                ReplaceIgnoreCase(description, "[url=" + hrefUrl + "]", "[url=" + fullUrl + "]");
+                description.Replace(imgUrl, mediumImage.Thumbnail);
+                continue;
             }
 
-            if (hrefIsImage)
-            {
-                var fullResult = await imageRehoster.RehostAsync(hrefImageUrl);
-                if (fullResult.Status == RehostStatus.Success)
-                {
-                    ReplaceIgnoreCase(description, "[url=" + hrefUrl + "]", "[url=" + fullResult.Image!.Full + "]");
-                    description.Replace(imgUrl, mediumImage.Thumbnail);
-                    continue;
-                }
-                Console.WriteLine($"    Full-resolution image found but its upload failed ({fullResult.Detail}) - leaving the original click-through link as-is so the real source is still reachable.");
-            }
-            else
-            {
-                Console.WriteLine($"    No separate, genuinely-bigger full-resolution version found for {hrefUrl} - leaving the original click-through link as-is so the real source is still reachable.");
-            }
+            Console.WriteLine($"    No separate, genuinely-bigger full-resolution version found for {hrefUrl} - leaving the original click-through link as-is so the real source is still reachable.");
 
             // CRITICAL: never replace [url=hrefUrl] with the medium upload here. This used to
             // silently collapse the click-through link to the exact same file already shown as
