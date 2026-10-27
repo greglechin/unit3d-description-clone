@@ -32,21 +32,44 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
         }
 
         var contentType = imageResp.Content.Headers.ContentType?.MediaType ?? "";
-        var rawStream = await imageResp.Content.ReadAsStreamAsync();
+        var rawBytes = await imageResp.Content.ReadAsByteArrayAsync();
         var fileName = Path.GetFileName(new Uri(imageUrl).LocalPath);
 
+        var labelledSvg = contentType.Contains("svg", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".svg", StringComparison.OrdinalIgnoreCase);
+        var rasterType = GetRasterImageType(rawBytes);
+
         Stream uploadStream;
-        if (contentType.Contains("svg", StringComparison.OrdinalIgnoreCase)
-            || fileName.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+        if (labelledSvg && rasterType is null)
         {
             Console.WriteLine("    Converting SVG to PNG...");
-            uploadStream = ConvertSvgToPng(rawStream);
-            fileName = Path.ChangeExtension(fileName, ".png");
-            contentType = "image/png";
+            try
+            {
+                uploadStream = ConvertSvgToPng(new MemoryStream(rawBytes));
+                fileName = Path.ChangeExtension(fileName, ".png");
+                contentType = "image/png";
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"    SVG conversion failed ({ex.Message}); using placeholder image.");
+                if (!string.IsNullOrEmpty(config.ImageHostPlaceholder))
+                {
+                    return new RehostedImage
+                    {
+                        Full = config.ImageHostPlaceholder,
+                        Thumbnail = config.ImageHostPlaceholder
+                    };
+                }
+                return null;
+            }
         }
         else
         {
-            uploadStream = rawStream;
+            if (labelledSvg)
+                Console.WriteLine($"    Labelled as SVG but content is {rasterType}; uploading as-is.");
+            if (rasterType is not null)
+                contentType = rasterType;
+            uploadStream = new MemoryStream(rawBytes);
         }
 
         using var uploadBuffer = new MemoryStream();
@@ -206,6 +229,20 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
                 return null;
             }
         }
+        return null;
+    }
+
+    private static string? GetRasterImageType(byte[] bytes)
+    {
+        var b = bytes.AsSpan();
+        if (b.Length > 8 && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47)
+            return "image/png";
+        if (b.Length > 3 && b[0] == 0xFF && b[1] == 0xD8)
+            return "image/jpeg";
+        if (b.Length > 12 && b.Slice(0, 4).SequenceEqual("RIFF"u8) && b.Slice(8, 4).SequenceEqual("WEBP"u8))
+            return "image/webp";
+        if (b.Length > 6 && (b.Slice(0, 6).SequenceEqual("GIF87a"u8) || b.Slice(0, 6).SequenceEqual("GIF89a"u8)))
+            return "image/gif";
         return null;
     }
 
