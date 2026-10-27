@@ -329,9 +329,16 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
             if (bytes is null)
                 continue;
 
-            if (thumbnailSizeBytes is { } known && bytes.Length <= known)
+            // A candidate that is STRICTLY smaller than the thumbnail is a worse derivative and gets
+            // skipped, same as before. One that is EXACTLY the same size is not a worse guess to reject,
+            // though - it's confirmation (not a guess) that this host has no separate, bigger original,
+            // so the medium already IS the full-resolution file. Per the user's explicit instruction
+            // (2026-10-04, seedpool 1029661/ptscreens.com): accept it here rather than falling through to
+            // "nothing found", so the caller can safely reuse the thumbnail's own CDN link instead of
+            // leaving the original external click-through link in place.
+            if (thumbnailSizeBytes is { } known && bytes.Length < known)
             {
-                Console.WriteLine($"    Full-resolution candidate {candidate} is not bigger than the thumbnail ({bytes.Length} vs {known} bytes) - skipping it.");
+                Console.WriteLine($"    Full-resolution candidate {candidate} is smaller than the thumbnail ({bytes.Length} vs {known} bytes) - skipping it.");
                 continue;
             }
 
