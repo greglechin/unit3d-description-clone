@@ -447,7 +447,23 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
                 var resp = await client.SendAsync(new HttpRequestMessage(HttpMethod.Get, imageUrl));
                 lastStatusCode = resp.StatusCode;
                 if (resp.IsSuccessStatusCode && resp.Content is not null)
+                {
+                    // A "soft 404": the server redirects to a static error graphic with an honest
+                    // HTTP 200 on the final hop, instead of ever returning a real 4xx/5xx status.
+                    // Confirmed real case (2026-10-05, seedpool 225891): a.l3n.co/b.l3n.co/c.l3n.co
+                    // all redirect a deleted image's URL to https://cdn.lensdump.com/404.png (200 OK,
+                    // same file every time). Checking the final URL's own filename after following
+                    // every redirect catches this regardless of host, and also avoids uploading the
+                    // same dead placeholder as a "new" CDN file every time it's hit.
+                    var finalPath = resp.RequestMessage?.RequestUri?.AbsolutePath ?? "";
+                    if (System.Text.RegularExpressions.Regex.IsMatch(
+                            finalPath, @"/404\.(png|jpe?g|gif|webp|bmp)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                    {
+                        resp.Dispose();
+                        return (null, FetchStatus.ConfirmedDead);
+                    }
                     return (resp, FetchStatus.Ok);
+                }
 
                 if (DefinitelyGoneStatusCodes.Contains(resp.StatusCode))
                 {
