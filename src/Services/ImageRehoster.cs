@@ -66,6 +66,77 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
         && TemporarilyPausedHosts.Any(h => uri.Host.Equals(h, StringComparison.OrdinalIgnoreCase)
             || uri.Host.EndsWith("." + h, StringComparison.OrdinalIgnoreCase));
 
+    // Some hosts return HTTP 200 with a real image body even when the actual file is gone (or never
+    // existed) - a branded "not found"/"unavailable" placeholder graphic instead of a real 4xx. A status-
+    // code check alone can't catch this. Direct port of the Python migration's KNOWN_PLACEHOLDER_SHA256 -
+    // matched by exact content hash, so a match only ever fires on a byte-identical repeat of a confirmed
+    // placeholder, never on a genuinely different real image.
+    //
+    // Dead means treated as a real, permanent failure (same as a 404). Temporary means left alone and
+    // reported as temporarily unavailable, never treated as evidence the file/host is actually gone - a
+    // site-wide "unavailable" placeholder is just as likely to show during a normal real image as during a
+    // genuinely deleted one.
+    //
+    // The imgbox hash below is currently redundant (imgbox.com is fully skipped via
+    // TemporarilyPausedHosts before any fetch is attempted) - kept anyway so it still protects as soon as
+    // imgbox is ever removed from that set again, same as the Python side's own standing policy.
+    private enum PlaceholderKind { Dead, Temporary }
+
+    private static readonly Dictionary<string, PlaceholderKind> KnownPlaceholderHashes =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["c0ff95f9ec7fea007b8236e8efddfcc6c0dfdd56f8e4c38c8ffed8fde655d8a7"] = PlaceholderKind.Temporary, // imgbox "Thumbnail Temporarily Unavailable"
+            ["9b5936f4006146e4e1e9025b474c02863c0b5614132ad40db4b925a10e8bfbb9"] = PlaceholderKind.Dead,      // imgur "image does not exist" 503-byte PNG - confirmed real, seedpool 289858
+        };
+
+    // At this scale, nobody is reviewing each result by hand, so a new host's own placeholder can't rely
+    // on being spotted manually the way imgbox's and imgur's were. The first time any given host is seen,
+    // this probes it with a URL guaranteed not to exist - a fake 200 with real image content means the
+    // host doesn't do proper 404s and is serving a static graphic for anything unrecognized. That
+    // response's hash becomes this host's own learned placeholder signature, cached for the rest of the
+    // run (in-memory only, same scope as hostLastRequestTime below - a fresh process re-probes once).
+    // Every auto-discovered placeholder defaults to Temporary, the safe direction to be wrong in; only a
+    // hash added to KnownPlaceholderHashes by hand, after a human actually looked at the image, should
+    // ever be Dead.
+    private readonly Dictionary<string, string?> hostProbedPlaceholderHash = new(StringComparer.OrdinalIgnoreCase);
+
+    private async Task<(string Sha256, PlaceholderKind Kind)?> GetHostPlaceholderAsync(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return null;
+
+        if (hostProbedPlaceholderHash.TryGetValue(uri.Host, out var cachedHash))
+            return cachedHash is null ? null : (cachedHash, PlaceholderKind.Temporary);
+
+        var probePath = $"/seedbrr-probe-nonexistent-{Guid.NewGuid():N}.jpg";
+        var probeUrl = $"{uri.Scheme}://{uri.Host}{probePath}";
+        try
+        {
+            await PaceHostRequestAsync(probeUrl);
+            using var resp = await client.SendAsync(new HttpRequestMessage(HttpMethod.Get, probeUrl));
+            if (resp.StatusCode == HttpStatusCode.OK)
+            {
+                var probeBytes = await resp.Content.ReadAsByteArrayAsync();
+                if (probeBytes.Length > 0)
+                {
+                    var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(probeBytes)).ToLowerInvariant();
+                    hostProbedPlaceholderHash[uri.Host] = hash;
+                    Console.WriteLine($"    [host probe] {uri.Host}: fake-200 on a nonexistent path - learned placeholder hash {hash[..16]}");
+                    return (hash, PlaceholderKind.Temporary);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Inconclusive (network hiccup, or the host is just dead) - don't cache a guess, so the next
+            // real URL from this host probes again instead of being stuck on a wrong answer.
+            return null;
+        }
+
+        hostProbedPlaceholderHash[uri.Host] = null; // real error status on a bogus path - host behaves properly
+        return null;
+    }
+
     // Ordinary web links that must never be treated as a click-through to a bigger picture, the same
     // role Python migration's NON_IMAGE_LINK_HOSTS/is_image_click_through() plays. Without this,
     // CandidateFullUrls' generic "try the href itself" / og:image fallbacks will treat ANY link as a
@@ -144,8 +215,8 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
 
         Console.WriteLine($"  Rehosting: {imageUrl}");
 
-        var (imageResp, fetchStatus) = await FetchWithRetryAsync(imageUrl);
-        if (imageResp is null)
+        var (rawBytes, contentType, fetchStatus) = await FetchWithRetryAsync(imageUrl);
+        if (rawBytes is null)
         {
             if (fetchStatus == FetchStatus.ConfirmedDead && !string.IsNullOrEmpty(config.ImageHostPlaceholder))
             {
@@ -168,8 +239,6 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
             return new RehostResult(status, null, detail);
         }
 
-        var contentType = imageResp.Content.Headers.ContentType?.MediaType ?? "";
-        var rawBytes = await imageResp.Content.ReadAsByteArrayAsync();
         var fileName = Path.GetFileName(new Uri(imageUrl).LocalPath);
 
         var labelledSvg = contentType.Contains("svg", StringComparison.OrdinalIgnoreCase)
@@ -188,16 +257,19 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"    SVG conversion failed ({ex.Message}); using placeholder image.");
                 if (!string.IsNullOrEmpty(config.ImageHostPlaceholder))
                 {
-                    return new RehostedImage
+                    Console.WriteLine($"    SVG conversion failed ({ex.Message}); using placeholder image: {config.ImageHostPlaceholder}");
+                    return new RehostResult(RehostStatus.Success, new RehostedImage
                     {
                         Full = config.ImageHostPlaceholder,
-                        Thumbnail = config.ImageHostPlaceholder
-                    };
+                        Thumbnail = config.ImageHostPlaceholder,
+                    }, null);
                 }
-                return null;
+
+                var detail = $"SVG conversion failed ({ex.Message}) and no placeholder is configured - leaving the original link as-is";
+                Console.WriteLine($"    {detail}");
+                return new RehostResult(RehostStatus.UploadFailed, null, detail);
             }
         }
         else
@@ -423,20 +495,19 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
 
     private async Task<byte[]?> DownloadIfImageAsync(string url)
     {
-        var (resp, status) = await FetchWithRetryAsync(url);
-        if (resp is null || status != FetchStatus.Ok)
+        var (bytes, contentType, status) = await FetchWithRetryAsync(url);
+        if (bytes is null || status != FetchStatus.Ok)
             return null;
-
-        using (resp)
-        {
-            var contentType = resp.Content.Headers.ContentType?.MediaType ?? "";
-            if (!contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
-                return null;
-            return await resp.Content.ReadAsByteArrayAsync();
-        }
+        if (!contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            return null;
+        return bytes;
     }
 
-    private async Task<(HttpResponseMessage? Response, FetchStatus Status)> FetchWithRetryAsync(string imageUrl)
+    // Returns the downloaded bytes (or null on any failure) plus its content type and FetchStatus. Reads
+    // the full body here, not just the response headers, so the content-hash placeholder check below can
+    // run centrally for every caller (the main rehost path AND the full-resolution click-through guesses
+    // in CandidateFullUrls/GetImageFromHref) instead of needing its own copy at each call site.
+    private async Task<(byte[]? Bytes, string ContentType, FetchStatus Status)> FetchWithRetryAsync(string imageUrl)
     {
         HttpStatusCode? lastStatusCode = null;
         for (var attempt = 0; attempt <= FetchRetries; attempt++)
@@ -460,15 +531,41 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
                             finalPath, @"/404\.(png|jpe?g|gif|webp|bmp)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
                     {
                         resp.Dispose();
-                        return (null, FetchStatus.ConfirmedDead);
+                        return (null, "", FetchStatus.ConfirmedDead);
                     }
-                    return (resp, FetchStatus.Ok);
+
+                    var contentType = resp.Content.Headers.ContentType?.MediaType ?? "";
+                    var bytes = await resp.Content.ReadAsByteArrayAsync();
+                    resp.Dispose();
+
+                    // A different flavor of soft-404: the SAME url (no redirect at all) serves a
+                    // static "not found"/"unavailable" placeholder graphic with an honest 200 every
+                    // time - confirmed real case, imgur's "image does not exist" PNG. The URL-pattern
+                    // check above can't catch this since there's no /404.* path to match; only the
+                    // content itself gives it away.
+                    if (bytes.Length > 0)
+                    {
+                        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+                        PlaceholderKind? kind = KnownPlaceholderHashes.TryGetValue(hash, out var known) ? known : null;
+                        if (kind is null)
+                        {
+                            var hostPlaceholder = await GetHostPlaceholderAsync(imageUrl);
+                            if (hostPlaceholder is { } probed && probed.Sha256 == hash)
+                                kind = probed.Kind;
+                        }
+                        if (kind == PlaceholderKind.Dead)
+                            return (null, "", FetchStatus.ConfirmedDead);
+                        if (kind == PlaceholderKind.Temporary)
+                            return (null, "", FetchStatus.TemporarilyUnavailable);
+                    }
+
+                    return (bytes, contentType, FetchStatus.Ok);
                 }
 
                 if (DefinitelyGoneStatusCodes.Contains(resp.StatusCode))
                 {
                     resp.Dispose();
-                    return (null, FetchStatus.ConfirmedDead);
+                    return (null, "", FetchStatus.ConfirmedDead);
                 }
 
                 resp.Dispose();
@@ -487,12 +584,12 @@ internal sealed class ImageRehoster(HttpClient client, AppConfig config)
             catch (Exception)
             {
                 Console.WriteLine($"    Failed to fetch image after {FetchRetries + 1} attempts.");
-                return (null, FetchStatus.TemporarilyUnavailable);
+                return (null, "", FetchStatus.TemporarilyUnavailable);
             }
         }
 
         Console.WriteLine($"    Failed to fetch image after {FetchRetries + 1} attempts.");
-        return (null, FetchStatus.TemporarilyUnavailable);
+        return (null, "", FetchStatus.TemporarilyUnavailable);
     }
 
     private static string? GetRasterImageType(byte[] bytes)
